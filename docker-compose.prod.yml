@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # ===== MySQL 数据库 =====
+  mysql:
+    image: mysql:8.0
+    container_name: anqing-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-AnqingRoot2026!}
+      MYSQL_DATABASE: anqing_card
+      MYSQL_USER: anqing
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Anqing@2026}
+    ports:
+      - "127.0.0.1:3306:3306"  # 仅本机访问，更安全
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./backups:/backups     # 备份目录
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-AnqingRoot2026!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ===== 后端应用 =====
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anqing-app
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=mysql://anqing:${MYSQL_PASSWORD:-Anqing@2026}@mysql:3306/anqing_card
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/trpc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===== Nginx 反向代理 + SSL =====
+  nginx:
+    image: nginx:alpine
+    container_name: anqing-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-ssl.conf:/etc/nginx/conf.d/default.conf
+      - ./ssl:/etc/nginx/ssl:ro          # SSL证书目录
+      - ./certbot:/etc/letsencrypt:ro    # Let's Encrypt证书
+      - certbot-www:/var/www/certbot     # 证书验证
+    depends_on:
+      - app
+
+  # ===== Let's Encrypt 自动续期 =====
+  certbot:
+    image: certbot/certbot
+    container_name: anqing-certbot
+    volumes:
+      - ./certbot:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  # ===== 自动备份服务 =====
+  backup:
+    image: mysql:8.0
+    container_name: anqing-backup
+    restart: always
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=anqing
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-Anqing@2026}
+      - MYSQL_DATABASE=anqing_card
+      - BACKUP_RETENTION_DAYS=30
+    entrypoint: "/bin/sh -c 'chmod +x /backup.sh && /backup.sh'"
+    depends_on:
+      - mysql
+
+volumes:
+  mysql-data:
+  certbot-www:
