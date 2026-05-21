@@ -11,6 +11,8 @@ import PositionProcess from '@/pages/flow/PositionProcess';
 import TopicLibrary from '@/pages/flow/TopicLibrary';
 import ReviewSummary from '@/pages/flow/ReviewSummary';
 import './App.css';
+import Login from "./pages/Login"
+import NotFound from "./pages/NotFound"
 
 function App() {
   return (
@@ -29,6 +31,8 @@ function App() {
               <Route path="/flow-match/position-process" element={<PositionProcess />} />
               <Route path="/flow-match/topic-library" element={<TopicLibrary />} />
               <Route path="/flow-match/review-summary" element={<ReviewSummary />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </div>
