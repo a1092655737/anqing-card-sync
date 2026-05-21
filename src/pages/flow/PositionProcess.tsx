@@ -142,7 +142,7 @@ const TextCell = memo(function TextCell({ value, onChange, placeholder, headerSt
     <div className="flex items-stretch">
       <textarea ref={ref} value={value} onChange={e => { onChange(e.target.value); autoResize(ref.current); }} rows={1}
         className="w-full m-0 rounded border-0 outline-none resize-none overflow-hidden box-border self-center"
-        style={{ fontFamily: headerStyle ? '"NotoSansCJK-Bold", sans-serif' : 'inherit', fontWeight: headerStyle ? 700 : 400, fontSize: headerStyle ? 14 : 12, padding: '6px 8px', lineHeight: '1.5', textAlign: 'center', background: headerStyle ? 'rgba(167,139,250,0.06)' : '#fff', color: headerStyle ? '#a78bfa' : '#000', border: headerStyle ? '1px solid rgba(167,139,250,0.2)' : 'none', minHeight: headerStyle ? 40 : 30 }}
+        style={{ fontFamily: headerStyle ? '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif' : 'inherit', fontWeight: headerStyle ? 700 : 400, fontSize: headerStyle ? 14 : 12, padding: '6px 8px', lineHeight: '1.5', textAlign: 'center', background: headerStyle ? 'rgba(167,139,250,0.06)' : '#fff', color: headerStyle ? '#a78bfa' : '#000', border: headerStyle ? '1px solid rgba(167,139,250,0.2)' : 'none', minHeight: headerStyle ? 40 : 30 }}
         placeholder={placeholder} />
     </div>
   );
@@ -169,18 +169,44 @@ export default function PositionProcess() {
   const { state } = useData();
   const utils = trpc.useUtils();
 
-  // tRPC
-  const { data: serverTasks } = trpc.task.list.useQuery();
+  // Detect if backend is online (ping test)
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch('/api/trpc/ping')
+      .then(r => r.ok ? setBackendOnline(true) : setBackendOnline(false))
+      .catch(() => setBackendOnline(false));
+  }, []);
+
+  // tRPC: only enabled when backend is detected online
+  const { data: serverTasks } = trpc.task.list.useQuery(undefined, {
+    enabled: backendOnline === true,
+    retry: false,
+    staleTime: Infinity,
+  });
   const bulkReplace = trpc.task.bulkReplace.useMutation({
     onSuccess: () => utils.task.list.invalidate(),
   });
 
-  const [tasks, setTasks] = useState<PositionTask[]>([]);
+  const mockTasks: PositionTask[] = [
+    { id: '1', cardProduct: '电信星耀卡', topicName: '19元185G全国流量', publishAccount: '@流量卡测评君', copywriter: '张三', copyStartTime: '2026-05-19', copyEndTime: '2026-05-20', videoProducer: '李四', videoStartTime: '2026-05-20', videoEndTime: '2026-05-21', publishTime: '2026-05-22T20:00' },
+    { id: '2', cardProduct: '移动潮玩卡', topicName: '39元200G超大流量', publishAccount: '@手机卡推荐', copywriter: '王五', copyStartTime: '2026-05-19', copyEndTime: '2026-05-21', videoProducer: '赵六', videoStartTime: '2026-05-21', videoEndTime: '2026-05-22', publishTime: '2026-05-23T18:00' },
+    { id: '3', cardProduct: '联通天王卡', topicName: '29元220G通用流量', publishAccount: '@通信达人', copywriter: '张三', copyStartTime: '2026-05-18', copyEndTime: '2026-05-19', videoProducer: '李四', videoStartTime: '2026-05-19', videoEndTime: '2026-05-20', publishTime: '2026-05-21T19:00' },
+  ];
+
+  const loadLocalTasks = (): PositionTask[] | null => {
+    try {
+      const saved = localStorage.getItem('anqing_position_process');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  const [tasks, setTasks] = useState<PositionTask[]>(() => loadLocalTasks() || mockTasks);
   const [headers, setHeaders] = useState<string[]>(DEFAULT_HEADERS);
 
-  // Sync from server
+  // Sync from server when backend is online
   useEffect(() => {
-    if (serverTasks && serverTasks.length > 0) {
+    if (backendOnline === true && serverTasks && serverTasks.length > 0) {
       setTasks(serverTasks.map((t: any) => ({
         id: String(t.id),
         cardProduct: t.cardProduct,
@@ -195,28 +221,27 @@ export default function PositionProcess() {
         publishTime: t.publishTime,
       })));
     }
-  }, [serverTasks]);
+  }, [serverTasks, backendOnline]);
 
-  // Auto-save: sync local state to server (debounced)
+  // Auto-save
   useEffect(() => {
     if (tasks.length === 0) return;
     const timeout = setTimeout(() => {
-      const payload = tasks.map(t => ({
-        cardProduct: t.cardProduct,
-        topicName: t.topicName,
-        publishAccount: t.publishAccount,
-        copywriter: t.copywriter,
-        copyStartTime: t.copyStartTime,
-        copyEndTime: t.copyEndTime,
-        videoProducer: t.videoProducer,
-        videoStartTime: t.videoStartTime,
-        videoEndTime: t.videoEndTime,
-        publishTime: t.publishTime,
-      }));
-      bulkReplace.mutate(payload);
+      if (backendOnline === true) {
+        const payload = tasks.map(t => ({
+          cardProduct: t.cardProduct, topicName: t.topicName,
+          publishAccount: t.publishAccount, copywriter: t.copywriter,
+          copyStartTime: t.copyStartTime, copyEndTime: t.copyEndTime,
+          videoProducer: t.videoProducer, videoStartTime: t.videoStartTime,
+          videoEndTime: t.videoEndTime, publishTime: t.publishTime,
+        }));
+        bulkReplace.mutate(payload);
+      } else {
+        try { localStorage.setItem('anqing_position_process', JSON.stringify(tasks)); } catch { /* ignore */ }
+      }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [tasks]);
+  }, [tasks, backendOnline]);
 
   // Sync locked topics from TitleSelect
   useEffect(() => {
@@ -270,7 +295,7 @@ export default function PositionProcess() {
             <ArrowLeft className="w-4 h-4 text-white/60" />
           </Link>
           <div>
-            <h2 className="text-xl flex items-center gap-2" style={{ fontFamily: '"NotoSansCJK-Bold", sans-serif', fontWeight: 700, color: '#a78bfa' }}>
+            <h2 className="text-xl flex items-center gap-2" style={{ fontFamily: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif', fontWeight: 700, color: '#a78bfa' }}>
               <Workflow className="w-5 h-5" />岗位进程
             </h2>
             <p className="text-xs text-white/40 mt-0.5">跟踪各岗位任务进度</p>

@@ -16,10 +16,13 @@ const trpcClient = trpc.createClient({
         return token ? { Authorization: `Bearer ${token}` } : {};
       },
       fetch(input, init) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
-        });
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
       },
     }),
   ],

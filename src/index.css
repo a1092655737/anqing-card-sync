@@ -2,13 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Noto Sans CJK SC Bold - heavy black font */
-@font-face {
-  font-family: 'NotoSansCJK-Bold';
-  src: url('/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc') format('truetype-collection');
-  font-weight: 700;
-  font-display: swap;
-}
+/* Use system font stack - no external CDN dependency */
+/* PingFang SC = macOS/iOS Chinese font */
+/* Microsoft YaHei = Windows Chinese font */
+/* Noto Sans SC = Linux/Android Chinese font */
 
 @layer base {
   :root {

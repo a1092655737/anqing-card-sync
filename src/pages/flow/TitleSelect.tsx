@@ -131,14 +131,45 @@ export default function TitleSelect() {
   const { state, addLockedTopics, removeLockedTopics } = useData();
   const utils = trpc.useUtils();
 
-  // tRPC queries & mutations
-  const { data: serverTitles } = trpc.title.list.useQuery();
+  // Detect if backend is online (ping test)
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch('/api/trpc/ping')
+      .then(r => r.ok ? setBackendOnline(true) : setBackendOnline(false))
+      .catch(() => setBackendOnline(false));
+  }, []);
+
+  // tRPC: only enabled when backend is detected online
+  const { data: serverTitles } = trpc.title.list.useQuery(undefined, {
+    enabled: backendOnline === true,
+    retry: false,
+    staleTime: Infinity,
+  });
   const bulkReplace = trpc.title.bulkReplace.useMutation({
     onSuccess: () => utils.title.list.invalidate(),
   });
 
+  // Default mock data
+  const mockTitles: TitleItem[] = [
+    { id: '1', name: '电信星耀卡——19元185G全国流量', direction: '突出大流量低月租优势，面向学生群体', reference: '类似电信星北卡推广样式', referenceImages: [], directorSuggest: '采用对比式开头，先展示原套餐价格再引出优惠', directorVote: 'agree', editorSuggest: '加入动态数字跳动效果，突出185G', editorVote: 'pending', operatorSuggest: '发布时间选择晚间8-10点', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-19' },
+    { id: '2', name: '移动潮玩卡39元200G超大流量', direction: '强调游戏场景，针对年轻用户', reference: '参考移动春明卡的风格', referenceImages: [], directorSuggest: '用游戏画面作为背景引入', directorVote: 'pending', editorSuggest: '添加游戏角色配音', editorVote: 'pending', operatorSuggest: '搭配游戏话题标签', operatorVote: 'pending', finalDecision: 'reject', rowHighlight: 'none', createdAt: '2026-05-19' },
+    { id: '3', name: '联通天王卡29元220G通用流量', direction: '主打性价比，对比竞品', reference: '参考联通福多多的推广', referenceImages: [], directorSuggest: '采用真人测评形式', directorVote: 'agree', editorSuggest: '快节奏剪辑，3秒一个镜头', editorVote: 'agree', operatorSuggest: '投放时间在周末流量高峰', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-18' },
+  ];
+
+  // Load from localStorage
+  const loadLocalTitles = (): TitleItem[] | null => {
+    try {
+      const saved = localStorage.getItem('anqing_title_select');
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return null;
+  };
+
   // Local state
-  const [titles, setTitles] = useState<TitleItem[]>([]);
+  const [titles, setTitles] = useState<TitleItem[]>(() => {
+    // Initial load: try localStorage first, fallback to mock data
+    return loadLocalTitles() || mockTitles;
+  });
   const [showAdd, setShowAdd] = useState(false);
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
   const [editingDate, setEditingDate] = useState<string | null>(null);
@@ -148,9 +179,9 @@ export default function TitleSelect() {
   const [rowMenuOpen, setRowMenuOpen] = useState<string | null>(null);
   const [lockedDates, setLockedDates] = useState<Set<string>>(new Set());
 
-  // Sync from server
+  // Sync from server when backend is online
   useEffect(() => {
-    if (serverTitles && serverTitles.length > 0) {
+    if (backendOnline === true && serverTitles && serverTitles.length > 0) {
       const mapped: TitleItem[] = serverTitles.map((t: any) => ({
         id: String(t.id),
         name: t.name,
@@ -169,31 +200,30 @@ export default function TitleSelect() {
       }));
       setTitles(mapped);
     }
-  }, [serverTitles]);
+  }, [serverTitles, backendOnline]);
 
-  // Auto-save: sync local state to server (debounced)
+  // Auto-save
   useEffect(() => {
     if (titles.length === 0) return;
     const timeout = setTimeout(() => {
-      const payload = titles.map(t => ({
-        name: t.name,
-        direction: t.direction,
-        reference: t.reference,
-        referenceImages: t.referenceImages,
-        directorSuggest: t.directorSuggest,
-        directorVote: t.directorVote,
-        editorSuggest: t.editorSuggest,
-        editorVote: t.editorVote,
-        operatorSuggest: t.operatorSuggest,
-        operatorVote: t.operatorVote,
-        finalDecision: t.finalDecision,
-        rowHighlight: t.rowHighlight,
-        createdAt: t.createdAt,
-      }));
-      bulkReplace.mutate(payload);
+      if (backendOnline === true) {
+        // Backend online: save to server
+        const payload = titles.map(t => ({
+          name: t.name, direction: t.direction, reference: t.reference,
+          referenceImages: t.referenceImages, directorSuggest: t.directorSuggest,
+          directorVote: t.directorVote, editorSuggest: t.editorSuggest,
+          editorVote: t.editorVote, operatorSuggest: t.operatorSuggest,
+          operatorVote: t.operatorVote, finalDecision: t.finalDecision,
+          rowHighlight: t.rowHighlight, createdAt: t.createdAt,
+        }));
+        bulkReplace.mutate(payload);
+      } else {
+        // Backend offline: save to localStorage
+        try { localStorage.setItem('anqing_title_select', JSON.stringify(titles)); } catch { /* ignore */ }
+      }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [titles]);
+  }, [titles, backendOnline]);
 
   const grouped: DateGroup[] = useMemo(() => {
     const map = new Map<string, TitleItem[]>();
@@ -395,7 +425,7 @@ export default function TitleSelect() {
                 <div className="grid grid-cols-7 gap-0 border-b border-white/[0.06]">
                   {COLS.map(c => (
                     <div key={c.key} className="px-3 py-2.5 text-center" style={{ background: c.bg, borderRight: `1px solid ${c.border}` }}>
-                      <span className="text-[15px] font-black tracking-wide text-[#a78bfa]" style={{ fontFamily: "'NotoSansCJK-Bold', 'Noto Sans CJK SC', sans-serif" }}>{c.label}</span>
+                      <span className="text-[15px] font-black tracking-wide text-[#a78bfa]" style={{ fontFamily: "'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" }}>{c.label}</span>
                     </div>
                   ))}
                 </div>
