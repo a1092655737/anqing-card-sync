@@ -2,22 +2,7 @@ import { ArrowLeft, FileSearch, Plus, ChevronDown, ChevronRight, Edit3, Check, X
 import { Link } from 'react-router-dom';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '@/context/DataContext';
-
-const TITLE_STORAGE_KEY = 'anqing_title_select';
-
-function loadSavedTitles(): TitleItem[] | null {
-  try {
-    const saved = localStorage.getItem(TITLE_STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch { /* ignore */ }
-  return null;
-}
-
-function saveTitlesToStorage(titles: TitleItem[]) {
-  try {
-    localStorage.setItem(TITLE_STORAGE_KEY, JSON.stringify(titles));
-  } catch { /* ignore */ }
-}
+import { trpc } from '@/providers/trpc';
 
 interface TitleItem {
   id: string;
@@ -51,12 +36,6 @@ const emptyItem = (date: string): TitleItem => ({
   createdAt: date,
 });
 
-const mockTitles: TitleItem[] = [
-  { id: '1', name: '电信星耀卡——19元185G全国流量', direction: '突出大流量低月租优势，面向学生群体', reference: '类似电信星北卡推广样式', referenceImages: [], directorSuggest: '采用对比式开头，先展示原套餐价格再引出优惠', directorVote: 'agree', editorSuggest: '加入动态数字跳动效果，突出185G', editorVote: 'pending', operatorSuggest: '发布时间选择晚间8-10点', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-19' },
-  { id: '2', name: '移动潮玩卡39元200G超大流量', direction: '强调游戏场景，针对年轻用户', reference: '参考移动春明卡的风格', referenceImages: [], directorSuggest: '用游戏画面作为背景引入', directorVote: 'pending', editorSuggest: '添加游戏角色配音', editorVote: 'pending', operatorSuggest: '搭配游戏话题标签', operatorVote: 'pending', finalDecision: 'reject', rowHighlight: 'none', createdAt: '2026-05-19' },
-  { id: '3', name: '联通天王卡29元220G通用流量', direction: '主打性价比，对比竞品', reference: '参考联通福多多的推广', referenceImages: [], directorSuggest: '采用真人测评形式', directorVote: 'agree', editorSuggest: '快节奏剪辑，3秒一个镜头', editorVote: 'agree', operatorSuggest: '投放时间在周末流量高峰', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-18' },
-];
-
 const COLS = [
   { key: 'name', label: '选题名称', color: '#a78bfa', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.2)' },
   { key: 'direction', label: '选题方向及思考', color: '#60a5fa', bg: 'rgba(96,165,250,0.06)', border: 'rgba(96,165,250,0.2)' },
@@ -67,10 +46,31 @@ const COLS = [
   { key: 'decision', label: '最终决议', color: '#f472b6', bg: 'rgba(244,114,182,0.06)', border: 'rgba(244,114,182,0.2)' },
 ];
 
+const VoteButton = ({ value, onChange, locked }: { value: 'agree' | 'pending'; onChange: (v: 'agree' | 'pending') => void; locked: boolean }) => (
+  <div className={`flex gap-1 ${locked ? 'pointer-events-none opacity-40' : ''}`}>
+    <button onClick={() => onChange('agree')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'agree' ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-300 hover:text-emerald-600'}`}>
+      <ThumbsUp className="w-3 h-3" /> 赞同
+    </button>
+    <button onClick={() => onChange('pending')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'pending' ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-amber-300 hover:text-amber-600'}`}>
+      <HelpCircle className="w-3 h-3" /> 待定
+    </button>
+  </div>
+);
+
+const DecisionButton = ({ value, onChange, onDouble, locked }: { value: 'execute' | 'reject'; onChange: (v: 'execute' | 'reject') => void; onDouble: (v: 'execute' | 'reject') => void; locked: boolean }) => (
+  <div className={`flex gap-1 ${locked ? 'pointer-events-none opacity-40' : ''}`}>
+    <button onClick={() => onChange('execute')} onDoubleClick={() => onDouble('execute')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'execute' ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-300 hover:text-emerald-600'}`}>
+      <Play className="w-3 h-3" /> 执行
+    </button>
+    <button onClick={() => onChange('reject')} onDoubleClick={() => onDouble('reject')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'reject' ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-red-300 hover:text-red-600'}`}>
+      <Square className="w-3 h-3" /> 不执行
+    </button>
+  </div>
+);
+
 // ===== Reference Cell: text + image upload =====
 const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
-  text: string;
-  images: string[];
+  text: string; images: string[];
   onTextChange: (v: string) => void;
   onImagesChange: (imgs: string[]) => void;
   locked: boolean;
@@ -97,7 +97,6 @@ const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
 
   return (
     <div className={`p-3 ${locked ? 'pointer-events-none opacity-40' : ''}`} style={{ background: COLS[2].bg }}>
-      {/* Text input */}
       <textarea
         value={text}
         onChange={e => onTextChange(e.target.value)}
@@ -105,41 +104,19 @@ const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
         className="w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400/40 placeholder-gray-400 leading-relaxed mb-2"
         placeholder="参考样式..."
       />
-      {/* Image upload button */}
       <div className="flex items-center gap-2 mb-2">
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/25 transition-all border border-emerald-500/10"
-        >
+        <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/25 transition-all border border-emerald-500/10">
           <Image className="w-3 h-3" /> 上传图片
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFile}
-          className="hidden"
-        />
-        {images.length > 0 && (
-          <span className="text-[10px] text-white/40">{images.length} 张图片</span>
-        )}
+        <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFile} className="hidden" />
+        {images.length > 0 && <span className="text-[10px] text-white/40">{images.length} 张图片</span>}
       </div>
-      {/* Image gallery */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {images.map((img, idx) => (
             <div key={idx} className="relative group/img">
-              <img
-                src={img}
-                alt={`参考 ${idx + 1}`}
-                className="w-16 h-16 object-cover rounded-lg border border-white/10 cursor-pointer hover:border-emerald-400/50 transition-colors"
-                onClick={() => window.open(img, '_blank')}
-              />
-              <button
-                onClick={() => removeImage(idx)}
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
-              >
+              <img src={img} alt={`参考 ${idx + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/10 cursor-pointer hover:border-emerald-400/50 transition-colors" onClick={() => window.open(img, '_blank')} />
+              <button onClick={() => removeImage(idx)} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
                 <Trash2 className="w-2.5 h-2.5 text-white" />
               </button>
             </div>
@@ -150,31 +127,18 @@ const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
   );
 };
 
-const VoteButton = ({ value, onChange, locked }: { value: 'agree' | 'pending'; onChange: (v: 'agree' | 'pending') => void; locked: boolean }) => (
-  <div className={`flex gap-1 ${locked ? 'pointer-events-none opacity-40' : ''}`}>
-    <button onClick={() => onChange('agree')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'agree' ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-300 hover:text-emerald-600'}`}>
-      <ThumbsUp className="w-3 h-3" /> 赞同
-    </button>
-    <button onClick={() => onChange('pending')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'pending' ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-amber-300 hover:text-amber-600'}`}>
-      <HelpCircle className="w-3 h-3" /> 待定
-    </button>
-  </div>
-);
-
-const DecisionButton = ({ value, onChange, onDouble, locked }: { value: 'execute' | 'reject'; onChange: (v: 'execute' | 'reject') => void; onDouble: (v: 'execute' | 'reject') => void; locked: boolean }) => (
-  <div className={`flex gap-1 ${locked ? 'pointer-events-none opacity-40' : ''}`}>
-    <button onClick={() => onChange('execute')} onDoubleClick={() => onDouble('execute')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'execute' ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-300 hover:text-emerald-600'}`}>
-      <Play className="w-3 h-3" /> 执行
-    </button>
-    <button onClick={() => onChange('reject')} onDoubleClick={() => onDouble('reject')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 border ${value === 'reject' ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/30' : 'bg-white text-gray-700 border-gray-300 hover:border-red-300 hover:text-red-600'}`}>
-      <Square className="w-3 h-3" /> 不执行
-    </button>
-  </div>
-);
-
 export default function TitleSelect() {
   const { state, addLockedTopics, removeLockedTopics } = useData();
-  const [titles, setTitles] = useState<TitleItem[]>(() => loadSavedTitles() || mockTitles);
+  const utils = trpc.useUtils();
+
+  // tRPC queries & mutations
+  const { data: serverTitles } = trpc.title.list.useQuery();
+  const bulkReplace = trpc.title.bulkReplace.useMutation({
+    onSuccess: () => utils.title.list.invalidate(),
+  });
+
+  // Local state
+  const [titles, setTitles] = useState<TitleItem[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
   const [editingDate, setEditingDate] = useState<string | null>(null);
@@ -184,15 +148,57 @@ export default function TitleSelect() {
   const [rowMenuOpen, setRowMenuOpen] = useState<string | null>(null);
   const [lockedDates, setLockedDates] = useState<Set<string>>(new Set());
 
+  // Sync from server
+  useEffect(() => {
+    if (serverTitles && serverTitles.length > 0) {
+      const mapped: TitleItem[] = serverTitles.map((t: any) => ({
+        id: String(t.id),
+        name: t.name,
+        direction: t.direction,
+        reference: t.reference,
+        referenceImages: (t.referenceImages as string[]) || [],
+        directorSuggest: t.directorSuggest,
+        directorVote: t.directorVote as 'agree' | 'pending',
+        editorSuggest: t.editorSuggest,
+        editorVote: t.editorVote as 'agree' | 'pending',
+        operatorSuggest: t.operatorSuggest,
+        operatorVote: t.operatorVote as 'agree' | 'pending',
+        finalDecision: t.finalDecision as 'execute' | 'reject',
+        rowHighlight: t.rowHighlight as 'none' | 'green' | 'red',
+        createdAt: t.createdAt,
+      }));
+      setTitles(mapped);
+    }
+  }, [serverTitles]);
+
+  // Auto-save: sync local state to server (debounced)
+  useEffect(() => {
+    if (titles.length === 0) return;
+    const timeout = setTimeout(() => {
+      const payload = titles.map(t => ({
+        name: t.name,
+        direction: t.direction,
+        reference: t.reference,
+        referenceImages: t.referenceImages,
+        directorSuggest: t.directorSuggest,
+        directorVote: t.directorVote,
+        editorSuggest: t.editorSuggest,
+        editorVote: t.editorVote,
+        operatorSuggest: t.operatorSuggest,
+        operatorVote: t.operatorVote,
+        finalDecision: t.finalDecision,
+        rowHighlight: t.rowHighlight,
+        createdAt: t.createdAt,
+      }));
+      bulkReplace.mutate(payload);
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [titles]);
+
   const grouped: DateGroup[] = useMemo(() => {
     const map = new Map<string, TitleItem[]>();
     titles.forEach(t => { const list = map.get(t.createdAt) || []; list.push(t); map.set(t.createdAt, list); });
     return Array.from(map.entries()).map(([date, items]) => ({ date, titles: items })).sort((a, b) => b.date.localeCompare(a.date));
-  }, [titles]);
-
-  // Auto-save: persist to localStorage whenever titles change
-  useEffect(() => {
-    saveTitlesToStorage(titles);
   }, [titles]);
 
   const toggleCollapse = (date: string) => {
@@ -206,20 +212,12 @@ export default function TitleSelect() {
     setLockedDates(prev => {
       const next = new Set(prev);
       if (next.has(date)) {
-        // Unlocking: remove ALL topic names in this date group from global state
         next.delete(date);
-        const topicsToRemove = titles
-          .filter(t => t.createdAt === date)
-          .map(t => t.name)
-          .filter(n => n.trim() !== '');
+        const topicsToRemove = titles.filter(t => t.createdAt === date).map(t => t.name).filter(n => n.trim() !== '');
         if (topicsToRemove.length > 0) removeLockedTopics(topicsToRemove);
       } else {
-        // Locking: add ALL topic names in this date group to global state
         next.add(date);
-        const topicsToAdd = titles
-          .filter(t => t.createdAt === date)
-          .map(t => t.name)
-          .filter(n => n.trim() !== '');
+        const topicsToAdd = titles.filter(t => t.createdAt === date).map(t => t.name).filter(n => n.trim() !== '');
         if (topicsToAdd.length > 0) addLockedTopics(topicsToAdd);
       }
       return next;
@@ -251,36 +249,6 @@ export default function TitleSelect() {
     setTitles(titles.map(t => t.id === id ? { ...t, rowHighlight: decision === 'execute' ? 'green' as const : 'red' as const } : t));
   };
 
-  // Export data to JSON file
-  const exportData = () => {
-    const data = JSON.stringify({ titles, exportTime: new Date().toISOString(), version: '1.0' }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `标题甄选_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Import data from JSON file
-  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result as string);
-        if (data.titles && Array.isArray(data.titles)) {
-          setTitles(data.titles);
-          saveTitlesToStorage(data.titles);
-        }
-      } catch { /* ignore */ }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
   const rowBg = (h: string) => {
     if (h === 'green') return { background: 'rgba(16,185,129,0.20)', boxShadow: 'inset 0 0 0 1px rgba(16,185,129,0.35)' };
     if (h === 'red') return { background: 'rgba(239,68,68,0.20)', boxShadow: 'inset 0 0 0 1px rgba(239,68,68,0.35)' };
@@ -293,6 +261,32 @@ export default function TitleSelect() {
       <input type="text" value={value} onChange={e => onChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTitle()} placeholder={placeholder} className="w-full bg-white text-gray-900 text-sm font-semibold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/40 placeholder-gray-400" />
     </div>
   );
+
+  // Export data
+  const exportData = () => {
+    const data = JSON.stringify({ titles, exportTime: new Date().toISOString(), version: '1.0' }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `标题甄选_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result as string);
+        if (data.titles && Array.isArray(data.titles)) setTitles(data.titles);
+      } catch { /* ignore */ }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   return (
     <main className="max-w-[1440px] mx-auto px-6 py-6">
@@ -343,7 +337,6 @@ export default function TitleSelect() {
           const isMenuOpen = menuOpen === group.date;
           return (
             <div key={group.date} className="rounded-2xl border border-white/[0.07] overflow-hidden bg-[#13102b]/50 relative">
-              {/* Date Header */}
               <div className={`flex items-center justify-between px-5 py-3 border-b border-white/[0.06] ${isLocked ? 'bg-red-500/10' : 'bg-gradient-to-r from-white/[0.04] to-transparent'}`}>
                 <div className="flex items-center gap-3 flex-1">
                   <button onClick={() => toggleCollapse(group.date)} className="cursor-pointer w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
@@ -368,16 +361,13 @@ export default function TitleSelect() {
                   )}
                   <span className="text-[10px] text-white/25 px-2 py-0.5 rounded-full bg-white/5">{group.titles.length} 条</span>
                   {executeCount > 0 && <span className="text-[10px] text-emerald-400 px-2 py-0.5 rounded-full bg-emerald-500/10">执行 {executeCount}</span>}
-                  {/* Lock toggle */}
                   <button onClick={() => toggleLock(group.date)} className={`ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${isLocked ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>
                     {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                     {isLocked ? '已锁定' : '锁定选题'}
                   </button>
                 </div>
-
                 <div className="relative">
-                  <button onClick={() => setMenuOpen(isMenuOpen ? null : group.date)}
-                    className="w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-400 flex items-center justify-center transition-all shadow-lg shadow-blue-500/30">
+                  <button onClick={() => setMenuOpen(isMenuOpen ? null : group.date)} className="w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-400 flex items-center justify-center transition-all shadow-lg shadow-blue-500/30">
                     <MoreHorizontal className="w-4 h-4 text-white" />
                   </button>
                   {isMenuOpen && (
@@ -396,12 +386,8 @@ export default function TitleSelect() {
                 </div>
               </div>
 
-              {/* Locked overlay - only covers this group */}
               {!isCollapsed && isLocked && (
-                <div 
-                  className="absolute left-0 right-0 bg-black/30 z-10 pointer-events-none rounded-b-2xl" 
-                  style={{ top: '52px', bottom: 0 }}
-                />
+                <div className="absolute left-0 right-0 bg-black/30 z-10 pointer-events-none rounded-b-2xl" style={{ top: '52px', bottom: 0 }} />
               )}
 
               {!isCollapsed && (
