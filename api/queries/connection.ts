@@ -19,8 +19,11 @@ function getPool(): mysql.Pool {
       database: url.pathname.slice(1),
       ssl: { rejectUnauthorized: false },
       waitForConnections: true,
-      connectionLimit: 5,
+      connectionLimit: 3,
       queueLimit: 0,
+      connectTimeout: 30000,
+      acquireTimeout: 30000,
+      timeout: 30000,
     });
   }
   return pool;
