@@ -22,8 +22,6 @@ function getPool(): mysql.Pool {
       connectionLimit: 3,
       queueLimit: 0,
       connectTimeout: 30000,
-      acquireTimeout: 30000,
-      timeout: 30000,
     });
   }
   return pool;
