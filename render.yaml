@@ -10,18 +10,18 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 10000
+        value: "10000"
       - key: DATABASE_URL
-        sync: false
+        value: ""
       - key: APP_ID
-        value: 19e20a70-b892-8b29-8000-0000e4162c09
+        value: "19e20a70-b892-8b29-8000-0000e4162c09"
       - key: APP_SECRET
-        sync: false
+        value: ""
       - key: KIMI_AUTH_URL
         value: https://auth.kimi.com
       - key: KIMI_OPEN_URL
         value: https://open.kimi.com
       - key: VITE_APP_ID
-        value: 19e20a70-b892-8b29-8000-0000e4162c09
+        value: "19e20a70-b892-8b29-8000-0000e4162c09"
       - key: VITE_KIMI_AUTH_URL
         value: https://auth.kimi.com
