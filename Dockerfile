@@ -38,4 +38,4 @@ COPY --from=builder /app/.env ./
 EXPOSE 3000
 
 # 启动命令
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/boot.js"]
