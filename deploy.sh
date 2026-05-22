@@ -1,86 +1,134 @@
 #!/bin/bash
-# ============================================================
-# 安青卡业 - 一键部署脚本
-# 支持：CentOS / Ubuntu / Debian
-# ============================================================
+# 安青卡业 - Render 一键部署脚本
+# 用法: bash deploy.sh
 
 set -e
 
-APP_NAME="anqing-card"
-APP_DIR="/opt/$APP_NAME"
-
+echo ""
 echo "========================================"
-echo "  安青卡业 - 云服务器部署脚本"
+echo "  安青卡业 - Render 云端部署"
 echo "========================================"
 echo ""
 
-# ===== 1. 检查 root 权限 =====
-if [ "$EUID" -ne 0 ]; then
-    echo "请使用 root 权限运行: sudo bash deploy.sh"
+# 安装 gh CLI (如未安装)
+if ! command -v gh &> /dev/null; then
+    echo "[1/4] 安装 GitHub CLI..."
+    npm install -g gh 2>/dev/null || true
+fi
+
+if ! command -v gh &> /dev/null; then
+    echo "GitHub CLI 安装失败，请手动安装: https://cli.github.com"
     exit 1
 fi
 
-# ===== 2. 安装 Docker =====
-echo "[1/7] 检查 Docker..."
-if ! command -v docker &> /dev/null; then
-    echo "  正在安装 Docker..."
-    curl -fsSL https://get.docker.com | bash
-    systemctl enable docker
-    systemctl start docker
-    echo "  Docker 安装完成"
-else
-    echo "  Docker 已安装"
+# GitHub 登录
+if ! gh auth status &> /dev/null; then
+    echo ""
+    echo "[1/4] 登录 GitHub..."
+    echo "请在浏览器中完成授权..."
+    gh auth login --web --scopes repo
 fi
 
-# ===== 3. 安装 Docker Compose =====
-echo "[2/7] 检查 Docker Compose..."
-if ! command -v docker-compose &> /dev/null; then
-    echo "  正在安装 Docker Compose..."
-    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-    echo "  Docker Compose 安装完成"
-else
-    echo "  Docker Compose 已安装"
+GITHUB_USER=$(gh api user -q .login 2>/dev/null || echo "")
+if [ -z "$GITHUB_USER" ]; then
+    echo "无法获取 GitHub 用户名，请检查登录状态"
+    exit 1
 fi
 
-# ===== 4. 创建应用目录 =====
-echo "[3/7] 创建应用目录..."
-mkdir -p $APP_DIR
+echo "GitHub 用户: $GITHUB_USER"
 
-# ===== 5. 复制项目文件 =====
-echo "[4/7] 复制项目文件..."
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cp -r "$SCRIPT_DIR"/* $APP_DIR/
-cd $APP_DIR
+# 创建仓库
+REPO_NAME="anqing-card-sync"
+echo ""
+echo "[2/4] 创建 GitHub 仓库..."
 
-# ===== 6. 构建并启动 =====
-echo "[5/7] 构建 Docker 镜像（可能需要几分钟）..."
-docker-compose build
+if gh repo view "$GITHUB_USER/$REPO_NAME" &> /dev/null; then
+    echo "仓库 $REPO_NAME 已存在，直接推送..."
+else
+    echo "创建新仓库 $REPO_NAME..."
+    gh repo create "$REPO_NAME" --public --source=. --push
+    echo "仓库创建并推送完成！"
+fi
 
-echo "[6/7] 推送数据库表结构..."
-docker-compose run --rm app sh -c "npm run db:push"
+# 确保远程仓库正确并推送
+git remote remove origin 2>/dev/null || true
+git remote add origin "https://github.com/$GITHUB_USER/$REPO_NAME.git"
+git branch -M main 2>/dev/null || true
 
-echo "[7/7] 启动服务..."
-docker-compose up -d
+echo "推送代码..."
+git push -u origin main --force
 
-# ===== 7. 完成 =====
 echo ""
 echo "========================================"
-echo "  部署完成！"
+echo "  GitHub 推送完成！"
+echo "  https://github.com/$GITHUB_USER/$REPO_NAME"
+echo "========================================"
+
+# Render 部署
+echo ""
+echo "[3/4] 准备 Render 部署..."
+echo ""
+
+# 检查 Render CLI
+if command -v render &> /dev/null; then
+    echo "Render CLI 已安装，尝试自动创建服务..."
+    # 使用 Render blueprint 部署
+    if [ -f "render.yaml" ]; then
+        echo "发现 render.yaml，使用 Blueprint 部署..."
+        render blueprint launch --repo "$GITHUB_USER/$REPO_NAME" 2>/dev/null || echo "自动部署失败，请手动创建"
+    fi
+else
+    echo "Render CLI 未安装，请手动创建服务..."
+fi
+
+echo ""
+echo "========================================"
+echo "  部署步骤"
 echo "========================================"
 echo ""
-echo "  访问地址: http://$(curl -s ifconfig.me || echo '你的服务器IP'):3000"
-echo "  管理命令:"
-echo "    cd $APP_DIR"
-echo "    docker-compose logs -f    # 查看日志"
-echo "    docker-compose ps         # 查看状态"
-echo "    docker-compose restart    # 重启服务"
-echo "    docker-compose down       # 停止服务"
+echo "请在浏览器中完成以下操作："
 echo ""
-echo "  MySQL 数据库信息:"
-echo "    端口: 3306"
-echo "    数据库: anqing_card"
-echo "    用户名: anqing"
-echo "    密码: Anqing@2026"
+echo "  1. 打开 https://dashboard.render.com"
+echo "  2. 点击 [New +] → [Web Service]"
+echo "  3. 连接 GitHub 仓库: $GITHUB_USER/$REPO_NAME"
+echo "  4. 按以下配置填写："
+echo ""
+echo "     ┌─────────────────────────────────────────────┐"
+echo "     │  Name:           anqing-card-sync           │"
+echo "     │  Region:         Singapore                  │"
+echo "     │  Branch:         main                       │"
+echo "     │  Runtime:        Node                       │"
+echo "     │  Build Command:  npm install && npm run build│"
+echo "     │  Start Command:  npm start                  │"
+echo "     │  Plan:           Free                       │"
+echo "     └─────────────────────────────────────────────┘"
+echo ""
+echo "  5. 点击 [Advanced] → [Environment Variables]"
+echo "     添加以下环境变量："
+echo ""
+cat << 'EOF'
+     ┌────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+     │ 变量名              │ 值                                                                                                       │
+     ├────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+     │ NODE_ENV           │ production                                                                                               │
+     │ DATABASE_URL       │ mysql://2bxTomrbvBfMEC4.root:7m0aiTOJbefcRFZoA5kQd8INJEY2JHbs@ep-t4ni387b5e83b7519dc8.epsrv-...       │
+     │ APP_ID             │ 19e20a70-b892-8b29-8000-0000e4162c09                                                                    │
+     │ APP_SECRET         │ FyrifOShYakNtpWL3y1CcyIH3xW9c6VY                                                                       │
+     │ KIMI_AUTH_URL      │ https://auth.kimi.com                                                                                    │
+     │ KIMI_OPEN_URL      │ https://open.kimi.com                                                                                    │
+     │ VITE_APP_ID        │ 19e20a70-b892-8b29-8000-0000e4162c09                                                                    │
+     │ VITE_KIMI_AUTH_URL │ https://auth.kimi.com                                                                                    │
+     └────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+EOF
+
+echo "  6. 点击 [Create Web Service]"
+echo ""
+echo "  Render 会自动构建并部署！"
+echo "  部署完成后会分配一个域名，例如:"
+echo "  https://anqing-card-sync.onrender.com"
 echo ""
 echo "========================================"
+echo "  完成后数据自动云端同步！"
+echo "========================================"
+echo ""
