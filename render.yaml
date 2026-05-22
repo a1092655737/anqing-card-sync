@@ -12,11 +12,11 @@ services:
       - key: PORT
         value: 10000
       - key: DATABASE_URL
-        value: ""
+        sync: false
       - key: APP_ID
         value: "19e20a70-b892-8b29-8000-0000e4162c09"
       - key: APP_SECRET
-        value: ""
+        sync: false
       - key: KIMI_AUTH_URL
         value: https://auth.kimi.com
       - key: KIMI_OPEN_URL
