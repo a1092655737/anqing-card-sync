@@ -14,7 +14,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: APP_ID
-        value: "19e20a70-b892-8b29-8000-0000e4162c09"
+        value: 19e20a70-b892-8b29-8000-0000e4162c09
       - key: APP_SECRET
         sync: false
       - key: KIMI_AUTH_URL
@@ -22,6 +22,6 @@ services:
       - key: KIMI_OPEN_URL
         value: https://open.kimi.com
       - key: VITE_APP_ID
-        value: "19e20a70-b892-8b29-8000-0000e4162c09"
+        value: 19e20a70-b892-8b29-8000-0000e4162c09
       - key: VITE_KIMI_AUTH_URL
         value: https://auth.kimi.com
