@@ -260,22 +260,17 @@ export default function PositionProcess() {
           </div>
           {/* Sync status */}
           <div className="ml-4 flex items-center gap-3">
-            {lastError && (
-              <span className="text-[10px] text-red-400 flex items-center gap-1" title={lastError}>
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />同步异常
-              </span>
-            )}
             {syncing && (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <RefreshCw className="w-3 h-3 animate-spin" />同步中...
               </span>
             )}
-            {backendAvailable && !syncing && !lastError && (
+            {backendAvailable && !syncing && (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />已同步{lastSyncAt ? ` · ${lastSyncAt}` : ''}
               </span>
             )}
-            {!backendAvailable && (
+            {!backendAvailable && !syncing && (
               <span className="text-[10px] text-amber-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />离线模式
               </span>
