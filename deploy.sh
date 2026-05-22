@@ -11,25 +11,37 @@ echo "========================================"
 echo ""
 
 # 安装 gh CLI (如未安装)
-if ! command -v gh &> /dev/null; then
+GH_BIN="$(npm root -g)/gh/bin/gh.js"
+if ! command -v gh &> /dev/null && [ ! -f "$GH_BIN" ]; then
     echo "[1/4] 安装 GitHub CLI..."
     npm install -g gh 2>/dev/null || true
+    GH_BIN="$(npm root -g)/gh/bin/gh.js"
 fi
 
-if ! command -v gh &> /dev/null; then
+if command -v gh &> /dev/null; then
+    GH_CMD="gh"
+elif [ -f "$GH_BIN" ]; then
+    GH_CMD="node $GH_BIN"
+else
     echo "GitHub CLI 安装失败，请手动安装: https://cli.github.com"
     exit 1
 fi
 
 # GitHub 登录
-if ! gh auth status &> /dev/null; then
+if ! $GH_CMD auth status &> /dev/null; then
     echo ""
     echo "[1/4] 登录 GitHub..."
-    echo "请在浏览器中完成授权..."
-    gh auth login --web --scopes repo
+    # 尝试用 GITHUB_TOKEN 环境变量认证
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "使用 GITHUB_TOKEN 环境变量认证..."
+        $GH_CMD auth login --with-token <<< "$GITHUB_TOKEN"
+    else
+        echo "请在浏览器中完成授权..."
+        $GH_CMD auth login --web --scopes repo
+    fi
 fi
 
-GITHUB_USER=$(gh api user -q .login 2>/dev/null || echo "")
+GITHUB_USER=$($GH_CMD api user -q .login 2>/dev/null || echo "")
 if [ -z "$GITHUB_USER" ]; then
     echo "无法获取 GitHub 用户名，请检查登录状态"
     exit 1
@@ -42,11 +54,11 @@ REPO_NAME="anqing-card-sync"
 echo ""
 echo "[2/4] 创建 GitHub 仓库..."
 
-if gh repo view "$GITHUB_USER/$REPO_NAME" &> /dev/null; then
+if $GH_CMD repo view "$GITHUB_USER/$REPO_NAME" &> /dev/null; then
     echo "仓库 $REPO_NAME 已存在，直接推送..."
 else
     echo "创建新仓库 $REPO_NAME..."
-    gh repo create "$REPO_NAME" --public --source=. --push
+    $GH_CMD repo create "$REPO_NAME" --public --source=. --push
     echo "仓库创建并推送完成！"
 fi
 
@@ -68,18 +80,6 @@ echo "========================================"
 echo ""
 echo "[3/4] 准备 Render 部署..."
 echo ""
-
-# 检查 Render CLI
-if command -v render &> /dev/null; then
-    echo "Render CLI 已安装，尝试自动创建服务..."
-    # 使用 Render blueprint 部署
-    if [ -f "render.yaml" ]; then
-        echo "发现 render.yaml，使用 Blueprint 部署..."
-        render blueprint launch --repo "$GITHUB_USER/$REPO_NAME" 2>/dev/null || echo "自动部署失败，请手动创建"
-    fi
-else
-    echo "Render CLI 未安装，请手动创建服务..."
-fi
 
 echo ""
 echo "========================================"
