@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/mysql2";
-import { createConnection } from "mysql2";
+import { createPool } from "mysql2/promise";
 import { env } from "../lib/env";
 import * as schema from "@db/schema";
 import * as relations from "@db/relations";
@@ -10,11 +10,12 @@ let instance: ReturnType<typeof drizzle<typeof fullSchema>>;
 
 export function getDb() {
   if (!instance) {
-    const connection = createConnection({
+    const pool = createPool({
       uri: env.databaseUrl,
       ssl: { rejectUnauthorized: false },
+      connectionLimit: 10,
     });
-    instance = drizzle(connection, {
+    instance = drizzle(pool, {
       mode: "planetscale",
       schema: fullSchema,
     });
