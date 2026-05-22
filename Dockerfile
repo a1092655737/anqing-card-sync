@@ -32,7 +32,6 @@ COPY --from=builder /app/contracts ./contracts
 COPY --from=builder /app/db ./db
 COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/tsconfig.server.json ./
-COPY --from=builder /app/.env ./
 
 # 暴露端口
 EXPOSE 3000
