@@ -213,10 +213,10 @@ export default function PositionProcess() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.lockedTopics]);
 
-  const addRow = () => setTasks(p => [...p, emptyTask()]);
-  const removeRow = (id: string) => setTasks(p => p.filter(t => t.id !== id));
+  const addRow = () => setTasks([...tasks, emptyTask()]);
+  const removeRow = (id: string) => setTasks(tasks.filter(t => t.id !== id));
   const updateField = (id: string, field: keyof PositionTask, value: string) =>
-    setTasks(p => p.map(t => t.id === id ? { ...t, [field]: value } : t));
+    setTasks(tasks.map(t => t.id === id ? { ...t, [field]: value } : t));
   const updateHeader = (i: number, v: string) => setHeaders(p => p.map((h, idx) => idx === i ? v : h));
 
   const exportData = () => {

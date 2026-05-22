@@ -105,7 +105,7 @@ export default function Generator() {
         const rentNum = parseFloat(customRent);
         const flowNum = parseFloat(customFlow);
 
-        const img = new Image();
+        const img = document.createElement('img');
         img.onload = () => {
           ctx.clearRect(0, 0, CW, CH);
           ctx.drawImage(img, 0, 0, CW, CH);
@@ -161,7 +161,7 @@ export default function Generator() {
         const rentNum = parseFloat(customRent);
         const flowNum = parseFloat(customFlow);
 
-        const img = new Image();
+        const img = document.createElement('img');
         img.onload = () => {
           ctx.clearRect(0, 0, W, H);
           ctx.drawImage(img, 0, 0, W, H);
