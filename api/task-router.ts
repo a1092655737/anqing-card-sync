@@ -1,84 +1,28 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
-import { positionTasks } from "@db/schema";
-import { eq, desc } from "drizzle-orm";
+import { getPool } from "./queries/connection";
 
 export const taskRouter = createRouter({
   // List all tasks
   list: publicQuery.query(async () => {
-    console.log("[task.list] Querying position_tasks...");
-    const db = getDb();
-    const items = await db.select().from(positionTasks).orderBy(desc(positionTasks.id));
-    console.log(`[task.list] Returning ${items.length} items`);
-    return items;
+    const pool = getPool();
+    const [rows] = await pool.execute(
+      "SELECT id, card_product, topic_name, publish_account, copywriter, copy_start_time, copy_end_time, video_producer, video_start_time, video_end_time, publish_time, created_at FROM position_tasks ORDER BY id DESC"
+    );
+    return (rows as any[]).map((r) => ({
+      id: r.id,
+      cardProduct: r.card_product || "",
+      topicName: r.topic_name || "",
+      publishAccount: r.publish_account || "",
+      copywriter: r.copywriter || "",
+      copyStartTime: r.copy_start_time || "",
+      copyEndTime: r.copy_end_time || "",
+      videoProducer: r.video_producer || "",
+      videoStartTime: r.video_start_time || "",
+      videoEndTime: r.video_end_time || "",
+      publishTime: r.publish_time || "",
+    }));
   }),
-
-  // Create a new task
-  create: publicQuery
-    .input(
-      z.object({
-        cardProduct: z.string().optional(),
-        topicName: z.string().optional(),
-        publishAccount: z.string().optional(),
-        copywriter: z.string().optional(),
-        copyStartTime: z.string().optional(),
-        copyEndTime: z.string().optional(),
-        videoProducer: z.string().optional(),
-        videoStartTime: z.string().optional(),
-        videoEndTime: z.string().optional(),
-        publishTime: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const result = await db.insert(positionTasks).values({
-        cardProduct: input.cardProduct ?? "",
-        topicName: input.topicName ?? "",
-        publishAccount: input.publishAccount ?? "",
-        copywriter: input.copywriter ?? "",
-        copyStartTime: input.copyStartTime ?? "",
-        copyEndTime: input.copyEndTime ?? "",
-        videoProducer: input.videoProducer ?? "",
-        videoStartTime: input.videoStartTime ?? "",
-        videoEndTime: input.videoEndTime ?? "",
-        publishTime: input.publishTime ?? "",
-      });
-      return { id: Number(result[0].insertId) };
-    }),
-
-  // Update a task
-  update: publicQuery
-    .input(
-      z.object({
-        id: z.number(),
-        cardProduct: z.string().optional(),
-        topicName: z.string().optional(),
-        publishAccount: z.string().optional(),
-        copywriter: z.string().optional(),
-        copyStartTime: z.string().optional(),
-        copyEndTime: z.string().optional(),
-        videoProducer: z.string().optional(),
-        videoStartTime: z.string().optional(),
-        videoEndTime: z.string().optional(),
-        publishTime: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const { id, ...data } = input;
-      await db.update(positionTasks).set(data).where(eq(positionTasks.id, id));
-      return { ok: true };
-    }),
-
-  // Delete a task
-  delete: publicQuery
-    .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      await db.delete(positionTasks).where(eq(positionTasks.id, input.id));
-      return { ok: true };
-    }),
 
   // Bulk replace (for sync)
   bulkReplace: publicQuery
@@ -99,14 +43,26 @@ export const taskRouter = createRouter({
       )
     )
     .mutation(async ({ input }) => {
-      console.log(`[task.bulkReplace] Received ${input.length} items`);
-      const db = getDb();
-      await db.delete(positionTasks);
+      const pool = getPool();
+      await pool.execute("DELETE FROM position_tasks");
       if (input.length > 0) {
-        await db.insert(positionTasks).values(input);
-        console.log(`[task.bulkReplace] Inserted ${input.length} items`);
-      } else {
-        console.log(`[task.bulkReplace] Cleared all items`);
+        const values = input.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params = input.flatMap((item) => [
+          item.cardProduct,
+          item.topicName,
+          item.publishAccount,
+          item.copywriter,
+          item.copyStartTime,
+          item.copyEndTime,
+          item.videoProducer,
+          item.videoStartTime,
+          item.videoEndTime,
+          item.publishTime,
+        ]);
+        await pool.execute(
+          `INSERT INTO position_tasks (card_product, topic_name, publish_account, copywriter, copy_start_time, copy_end_time, video_producer, video_start_time, video_end_time, publish_time) VALUES ${values}`,
+          params
+        );
       }
       return { count: input.length };
     }),

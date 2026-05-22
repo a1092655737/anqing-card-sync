@@ -12,7 +12,7 @@ export const topicRouter = createRouter({
       .select()
       .from(lockedTopics)
       .where(isNull(lockedTopics.unlockedAt));
-    return items.map((t) => t.topicName);
+    return items.map((t: { topicName: string }) => t.topicName);
   }),
 
   // Lock topics

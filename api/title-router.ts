@@ -1,124 +1,33 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
-import { titleItems } from "@db/schema";
-import { eq, desc } from "drizzle-orm";
+import { getPool } from "./queries/connection";
 
 export const titleRouter = createRouter({
   // List all title items
   list: publicQuery.query(async () => {
-    console.log("[title.list] Querying title_items...");
-    const db = getDb();
-    const items = await db.select().from(titleItems).orderBy(desc(titleItems.id));
-    console.log(`[title.list] Returning ${items.length} items`);
-    return items;
+    const pool = getPool();
+    const [rows] = await pool.execute(
+      "SELECT id, name, direction, reference, reference_images, director_suggest, director_vote, editor_suggest, editor_vote, operator_suggest, operator_vote, final_decision, row_highlight, created_at FROM title_items ORDER BY id DESC"
+    );
+    return (rows as any[]).map((r) => ({
+      id: r.id,
+      name: r.name,
+      direction: r.direction || "",
+      reference: r.reference || "",
+      referenceImages: JSON.parse(r.reference_images || "[]"),
+      directorSuggest: r.director_suggest || "",
+      directorVote: r.director_vote || "pending",
+      editorSuggest: r.editor_suggest || "",
+      editorVote: r.editor_vote || "pending",
+      operatorSuggest: r.operator_suggest || "",
+      operatorVote: r.operator_vote || "pending",
+      finalDecision: r.final_decision || "execute",
+      rowHighlight: r.row_highlight || "none",
+      createdAt: r.created_at,
+    }));
   }),
 
-  // Create a new title item
-  create: publicQuery
-    .input(
-      z.object({
-        name: z.string().min(1),
-        direction: z.string().optional(),
-        reference: z.string().optional(),
-        referenceImages: z.array(z.string()).optional(),
-        directorSuggest: z.string().optional(),
-        directorVote: z.enum(["agree", "pending"]).optional(),
-        editorSuggest: z.string().optional(),
-        editorVote: z.enum(["agree", "pending"]).optional(),
-        operatorSuggest: z.string().optional(),
-        operatorVote: z.enum(["agree", "pending"]).optional(),
-        finalDecision: z.enum(["execute", "reject"]).optional(),
-        rowHighlight: z.enum(["none", "green", "red"]).optional(),
-        createdAt: z.string(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const result = await db.insert(titleItems).values({
-        name: input.name,
-        direction: input.direction ?? "",
-        reference: input.reference ?? "",
-        referenceImages: input.referenceImages ?? [],
-        directorSuggest: input.directorSuggest ?? "",
-        directorVote: input.directorVote ?? "pending",
-        editorSuggest: input.editorSuggest ?? "",
-        editorVote: input.editorVote ?? "pending",
-        operatorSuggest: input.operatorSuggest ?? "",
-        operatorVote: input.operatorVote ?? "pending",
-        finalDecision: input.finalDecision ?? "execute",
-        rowHighlight: input.rowHighlight ?? "none",
-        createdAt: input.createdAt,
-      });
-      return { id: Number(result[0].insertId) };
-    }),
-
-  // Update a title item
-  update: publicQuery
-    .input(
-      z.object({
-        id: z.number(),
-        name: z.string().optional(),
-        direction: z.string().optional(),
-        reference: z.string().optional(),
-        referenceImages: z.array(z.string()).optional(),
-        directorSuggest: z.string().optional(),
-        directorVote: z.enum(["agree", "pending"]).optional(),
-        editorSuggest: z.string().optional(),
-        editorVote: z.enum(["agree", "pending"]).optional(),
-        operatorSuggest: z.string().optional(),
-        operatorVote: z.enum(["agree", "pending"]).optional(),
-        finalDecision: z.enum(["execute", "reject"]).optional(),
-        rowHighlight: z.enum(["none", "green", "red"]).optional(),
-        createdAt: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const { id, ...data } = input;
-      await db.update(titleItems).set(data).where(eq(titleItems.id, id));
-      return { ok: true };
-    }),
-
-  // Delete a title item
-  delete: publicQuery
-    .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      await db.delete(titleItems).where(eq(titleItems.id, input.id));
-      return { ok: true };
-    }),
-
-  // Bulk create (for import)
-  bulkCreate: publicQuery
-    .input(
-      z.array(
-        z.object({
-          name: z.string(),
-          direction: z.string(),
-          reference: z.string(),
-          referenceImages: z.array(z.string()),
-          directorSuggest: z.string(),
-          directorVote: z.enum(["agree", "pending"]),
-          editorSuggest: z.string(),
-          editorVote: z.enum(["agree", "pending"]),
-          operatorSuggest: z.string(),
-          operatorVote: z.enum(["agree", "pending"]),
-          finalDecision: z.enum(["execute", "reject"]),
-          rowHighlight: z.enum(["none", "green", "red"]),
-          createdAt: z.string(),
-        })
-      )
-    )
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      if (input.length > 0) {
-        await db.insert(titleItems).values(input);
-      }
-      return { count: input.length };
-    }),
-
-  // Bulk replace (delete all + create new)
+  // Bulk replace (for sync)
   bulkReplace: publicQuery
     .input(
       z.array(
@@ -140,14 +49,29 @@ export const titleRouter = createRouter({
       )
     )
     .mutation(async ({ input }) => {
-      console.log(`[title.bulkReplace] Received ${input.length} items`);
-      const db = getDb();
-      await db.delete(titleItems);
+      const pool = getPool();
+      await pool.execute("DELETE FROM title_items");
       if (input.length > 0) {
-        const result = await db.insert(titleItems).values(input);
-        console.log(`[title.bulkReplace] Inserted ${input.length} items, result:`, result);
-      } else {
-        console.log(`[title.bulkReplace] Cleared all items`);
+        const values = input.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params = input.flatMap((item) => [
+          item.name,
+          item.direction,
+          item.reference,
+          JSON.stringify(item.referenceImages),
+          item.directorSuggest,
+          item.directorVote,
+          item.editorSuggest,
+          item.editorVote,
+          item.operatorSuggest,
+          item.operatorVote,
+          item.finalDecision,
+          item.rowHighlight,
+          item.createdAt,
+        ]);
+        await pool.execute(
+          `INSERT INTO title_items (name, direction, reference, reference_images, director_suggest, director_vote, editor_suggest, editor_vote, operator_suggest, operator_vote, final_decision, row_highlight, created_at) VALUES ${values}`,
+          params
+        );
       }
       return { count: input.length };
     }),
