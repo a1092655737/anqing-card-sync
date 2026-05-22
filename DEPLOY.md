@@ -1,151 +1,57 @@
-# 安青卡业 - 云服务器部署指南
+# Render 一键部署指南
 
-## 一、准备工作
+## 方式一：自动部署（推荐，2分钟）
 
-### 1. 购买云服务器（推荐配置）
-| 配置项 | 最低配置 | 推荐配置 |
-|--------|---------|---------|
-| CPU | 1核 | 2核 |
-| 内存 | 2GB | 4GB |
-| 带宽 | 1Mbps | 3Mbps+ |
-| 系统盘 | 20GB | 40GB |
-| 系统 | CentOS 7+/Ubuntu 20+/Debian 11+ |
+### 1. 获取 GitHub Token
 
-**推荐平台**：阿里云、腾讯云、华为云（选择离你最近的地区）
+1. 打开 https://github.com/settings/tokens/new
+2. Token name 填 `render-deploy`
+3. 勾选 **repo** 权限
+4. 点击 **Generate token**
+5. **复制 token**（以 `ghp_` 开头）
 
-### 2. 开放端口
-在云平台安全组/防火墙中开放：
-- `3000` - 应用端口（必须）
-- `80` - HTTP（可选，使用Nginx时）
-- `443` - HTTPS（可选，使用SSL时）
-- `3306` - MySQL（可选，如需要外部访问数据库）
-
----
-
-## 二、部署步骤
-
-### 方式一：一键脚本部署（推荐）
+### 2. 运行自动部署脚本
 
 ```bash
-# 1. 上传项目文件到服务器
-# 使用 SCP 或 FTP 将项目文件上传到 /root/anqing-card/
-
-# 2. 进入项目目录
-cd /root/anqing-card
-
-# 3. 运行部署脚本
-chmod +x deploy.sh
-sudo bash deploy.sh
+cd /mnt/agents/output/app
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+bash deploy.sh
 ```
 
 脚本会自动完成：
-- 安装 Docker 和 Docker Compose
-- 构建应用镜像
-- 初始化数据库
-- 启动所有服务
+- 创建 GitHub 仓库
+- 推送代码
+- 输出 Render 配置
 
-### 方式二：手动部署
+### 3. 在 Render 创建服务
 
-```bash
-# 1. 安装 Docker
-curl -fsSL https://get.docker.com | bash
-systemctl enable docker
-systemctl start docker
+1. 打开 https://dashboard.render.com
+2. 点击 **New + → Web Service**
+3. 选择你的 `anqing-card-sync` 仓库
+4. 配置自动填入，只需添加 **Environment Variables**：
 
-# 2. 安装 Docker Compose
-curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
+| 变量 | 值 |
+|------|-----|
+| `DATABASE_URL` | `mysql://2bxTomrbvBfMEC4.root:7m0aiTOJbefcRFZoA5kQd8INJEY2JHbs@ep-t4ni387b5e83b7519dc8.epsrv-t4n281l4mrmemi4zls9a.ap-southeast-1.privatelink.aliyuncs.com:4000/19e20a36-ff72-8f6e-8000-09cca51bd70e` |
+| `APP_SECRET` | `FyrifOShYakNtpWL3y1CcyIH3xW9c6VY` |
 
-# 3. 进入项目目录
-cd /path/to/anqing-card
-
-# 4. 构建并启动
-docker-compose up -d --build
-
-# 5. 推送数据库表结构
-docker-compose run --rm app sh -c "npm run db:push"
-
-# 6. 查看状态
-docker-compose ps
-```
+5. 点击 **Create Web Service**
 
 ---
 
-## 三、访问应用
+## 方式二：Blueprint 部署
 
-部署完成后，通过浏览器访问：
+如果已推送代码到 GitHub，可以直接使用 Blueprint：
 
-```
-http://你的服务器IP:3000
-```
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/你的用户名/anqing-card-sync)
 
-如需使用域名，请：
-1. 域名解析到服务器 IP
-2. 修改 `nginx.conf` 中的 `server_name`
-3. 重新加载配置：`docker-compose restart nginx`
+部署后只需在 Render 设置中补全 `DATABASE_URL` 和 `APP_SECRET` 环境变量。
 
 ---
 
-## 四、日常维护
+## 方式三：手动部署
 
-### 查看日志
-```bash
-cd /opt/anqing-card
-docker-compose logs -f app      # 应用日志
-docker-compose logs -f mysql    # 数据库日志
-```
-
-### 重启服务
-```bash
-cd /opt/anqing-card
-docker-compose restart
-```
-
-### 更新部署
-```bash
-cd /opt/anqing-card
-# 1. 上传新的代码文件
-# 2. 重新构建
-docker-compose down
-docker-compose up -d --build
-# 3. 推送数据库变更（如有schema修改）
-docker-compose run --rm app sh -c "npm run db:push"
-```
-
-### 数据备份
-```bash
-# 备份数据库
-docker exec anqing-mysql mysqldump -u anqing -pAnqing@2026 anqing_card > backup.sql
-
-# 恢复数据库
-docker exec -i anqing-mysql mysql -u anqing -pAnqing@2026 anqing_card < backup.sql
-```
-
----
-
-## 五、多人使用
-
-部署到云服务器后，所有团队成员访问同一个网址即可实现数据共享：
-
-| 功能 | 说明 |
-|------|------|
-| 标题甄选 | 所有人编辑的数据自动同步到数据库 |
-| 岗位进程 | 所有人可见，实时更新 |
-| 卡品信息 | 从数据库读取，统一管理 |
-| 数据持久化 | MySQL 数据库存储，不会丢失 |
-
----
-
-## 六、常见问题
-
-### Q: 部署后页面打不开？
-检查防火墙/安全组是否开放了 3000 端口。
-
-### Q: 数据库连接失败？
-检查 `docker-compose.yml` 中的数据库配置，确认 MySQL 容器已正常启动。
-
-### Q: 如何修改数据库密码？
-修改 `docker-compose.yml` 中 MySQL 的环境变量，然后重新部署。
-
-### Q: 需要SSL/HTTPS？
-可以使用 Nginx + Let's Encrypt 免费证书，或云平台的 SSL 证书服务。
+1. 在 GitHub 创建仓库 `anqing-card-sync`
+2. 推送代码
+3. 在 Render 创建 Web Service，选择 GitHub 仓库
+4. 填入配置和环境变量
