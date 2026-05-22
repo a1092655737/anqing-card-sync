@@ -30,17 +30,18 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ===== Title Items (标题甄选) =====
+// Note: TiDB text type doesn't support DEFAULT, use varchar with length instead
 export const titleItems = mysqlTable("title_items", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  direction: text("direction").notNull().default(""),
-  reference: text("reference").notNull().default(""),
-  referenceImages: json("reference_images").$type<string[]>().default([]),
-  directorSuggest: text("director_suggest").notNull().default(""),
+  name: varchar("name", { length: 2000 }).notNull(),
+  direction: varchar("direction", { length: 2000 }).notNull().default(""),
+  reference: varchar("reference", { length: 2000 }).notNull().default(""),
+  referenceImages: json("reference_images").$type<string[]>(),
+  directorSuggest: varchar("director_suggest", { length: 2000 }).notNull().default(""),
   directorVote: mysqlEnum("director_vote", ["agree", "pending"]).default("pending").notNull(),
-  editorSuggest: text("editor_suggest").notNull().default(""),
+  editorSuggest: varchar("editor_suggest", { length: 2000 }).notNull().default(""),
   editorVote: mysqlEnum("editor_vote", ["agree", "pending"]).default("pending").notNull(),
-  operatorSuggest: text("operator_suggest").notNull().default(""),
+  operatorSuggest: varchar("operator_suggest", { length: 2000 }).notNull().default(""),
   operatorVote: mysqlEnum("operator_vote", ["agree", "pending"]).default("pending").notNull(),
   finalDecision: mysqlEnum("final_decision", ["execute", "reject"]).default("execute").notNull(),
   rowHighlight: mysqlEnum("row_highlight", ["none", "green", "red"]).default("none").notNull(),
@@ -54,13 +55,13 @@ export type InsertTitleItem = typeof titleItems.$inferInsert;
 // ===== Position Tasks (岗位进程) =====
 export const positionTasks = mysqlTable("position_tasks", {
   id: serial("id").primaryKey(),
-  cardProduct: text("card_product").notNull().default(""),
-  topicName: text("topic_name").notNull().default(""),
-  publishAccount: text("publish_account").notNull().default(""),
-  copywriter: text("copywriter").notNull().default(""),
+  cardProduct: varchar("card_product", { length: 2000 }).notNull().default(""),
+  topicName: varchar("topic_name", { length: 2000 }).notNull().default(""),
+  publishAccount: varchar("publish_account", { length: 2000 }).notNull().default(""),
+  copywriter: varchar("copywriter", { length: 2000 }).notNull().default(""),
   copyStartTime: varchar("copy_start_time", { length: 20 }).notNull().default(""),
   copyEndTime: varchar("copy_end_time", { length: 20 }).notNull().default(""),
-  videoProducer: text("video_producer").notNull().default(""),
+  videoProducer: varchar("video_producer", { length: 2000 }).notNull().default(""),
   videoStartTime: varchar("video_start_time", { length: 20 }).notNull().default(""),
   videoEndTime: varchar("video_end_time", { length: 20 }).notNull().default(""),
   publishTime: varchar("publish_time", { length: 30 }).notNull().default(""),
@@ -74,7 +75,7 @@ export type InsertPositionTask = typeof positionTasks.$inferInsert;
 // ===== Locked Topics (锁定选题关联) =====
 export const lockedTopics = mysqlTable("locked_topics", {
   id: serial("id").primaryKey(),
-  topicName: text("topic_name").notNull(),
+  topicName: varchar("topic_name", { length: 2000 }).notNull(),
   lockDate: varchar("lock_date", { length: 20 }).notNull(),
   unlockedAt: timestamp("unlocked_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

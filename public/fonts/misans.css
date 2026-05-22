@@ -1,0 +1,8 @@
+@font-face {
+  font-family: 'MiSans';
+  font-style: normal;
+  font-weight: 330 400;
+  font-display: swap;
+  src: url('/fonts/MiSans-Regular.latin.woff2') format('woff2');
+  unicode-range: U+20-7E, U+A0-FF;
+}

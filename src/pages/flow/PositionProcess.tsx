@@ -1,8 +1,9 @@
-import { ArrowLeft, Workflow, Plus, X, ChevronDown, Upload, Download } from 'lucide-react';
+import { ArrowLeft, Workflow, Plus, X, ChevronDown, Upload, Download, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState, useRef, useEffect, memo, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, memo, useMemo } from 'react';
 import { useData } from '@/context/DataContext';
 import { trpc } from '@/providers/trpc';
+import { useSyncedState } from '@/hooks/useSyncedState';
 
 interface PositionTask {
   id: string;
@@ -24,6 +25,12 @@ const emptyTask = (): PositionTask => ({
   copyStartTime: '', copyEndTime: '', videoProducer: '', videoStartTime: '',
   videoEndTime: '', publishTime: '',
 });
+
+const mockTasks: PositionTask[] = [
+  { id: '1', cardProduct: '电信星耀卡', topicName: '19元185G全国流量', publishAccount: '@流量卡测评君', copywriter: '张三', copyStartTime: '2026-05-19', copyEndTime: '2026-05-20', videoProducer: '李四', videoStartTime: '2026-05-20', videoEndTime: '2026-05-21', publishTime: '2026-05-22T20:00' },
+  { id: '2', cardProduct: '移动潮玩卡', topicName: '39元200G超大流量', publishAccount: '@手机卡推荐', copywriter: '王五', copyStartTime: '2026-05-19', copyEndTime: '2026-05-21', videoProducer: '赵六', videoStartTime: '2026-05-21', videoEndTime: '2026-05-22', publishTime: '2026-05-23T18:00' },
+  { id: '3', cardProduct: '联通天王卡', topicName: '29元220G通用流量', publishAccount: '@通信达人', copywriter: '张三', copyStartTime: '2026-05-18', copyEndTime: '2026-05-19', videoProducer: '李四', videoStartTime: '2026-05-19', videoEndTime: '2026-05-20', publishTime: '2026-05-21T19:00' },
+];
 
 const DEFAULT_HEADERS = ['本期卡品','选题名称','发布账号','文案撰写人员','文案开始时间','文案结束时间','视频制作人员','视频开始时间','视频结束时间','预计发布时间'];
 const GRID_COLS = 'repeat(10, 1fr)';
@@ -49,7 +56,7 @@ function autoResize(el: HTMLTextAreaElement | null) {
   el.style.height = el.scrollHeight + 'px';
 }
 
-// ===== Card Product Dropdown Cell =====
+// ===== Card Product Dropdown =====
 const CardProductCell = memo(function CardProductCell({ value, onChange, placeholder }: {
   value: string; onChange: (v: string) => void; placeholder: string;
 }) {
@@ -142,7 +149,7 @@ const TextCell = memo(function TextCell({ value, onChange, placeholder, headerSt
     <div className="flex items-stretch">
       <textarea ref={ref} value={value} onChange={e => { onChange(e.target.value); autoResize(ref.current); }} rows={1}
         className="w-full m-0 rounded border-0 outline-none resize-none overflow-hidden box-border self-center"
-        style={{ fontFamily: headerStyle ? '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif' : 'inherit', fontWeight: headerStyle ? 700 : 400, fontSize: headerStyle ? 14 : 12, padding: '6px 8px', lineHeight: '1.5', textAlign: 'center', background: headerStyle ? 'rgba(167,139,250,0.06)' : '#fff', color: headerStyle ? '#a78bfa' : '#000', border: headerStyle ? '1px solid rgba(167,139,250,0.2)' : 'none', minHeight: headerStyle ? 40 : 30 }}
+        style={{ fontFamily: headerStyle ? '"PingFang SC", "Microsoft YaHei", sans-serif' : 'inherit', fontWeight: headerStyle ? 700 : 400, fontSize: headerStyle ? 14 : 12, padding: '6px 8px', lineHeight: '1.5', textAlign: 'center', background: headerStyle ? 'rgba(167,139,250,0.06)' : '#fff', color: headerStyle ? '#a78bfa' : '#000', border: headerStyle ? '1px solid rgba(167,139,250,0.2)' : 'none', minHeight: headerStyle ? 40 : 30 }}
         placeholder={placeholder} />
     </div>
   );
@@ -169,90 +176,41 @@ export default function PositionProcess() {
   const { state } = useData();
   const utils = trpc.useUtils();
 
-  // Detect if backend is online (ping test)
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
-  useEffect(() => {
-    fetch('/api/trpc/ping')
-      .then(r => r.ok ? setBackendOnline(true) : setBackendOnline(false))
-      .catch(() => setBackendOnline(false));
-  }, []);
-
-  // tRPC: only enabled when backend is detected online
-  const { data: serverTasks } = trpc.task.list.useQuery(undefined, {
-    enabled: backendOnline === true,
-    retry: false,
-    staleTime: Infinity,
+  const { data: tasks, setData: setTasks, syncing, backendAvailable } = useSyncedState<PositionTask[]>({
+    localKey: 'aq_position_process_v2',
+    defaultValue: mockTasks,
+    rpcQuery: async () => {
+      const items = await utils.client.task.list.query();
+      return items.map((t: any) => ({
+        id: String(t.id), cardProduct: t.cardProduct, topicName: t.topicName,
+        publishAccount: t.publishAccount, copywriter: t.copywriter,
+        copyStartTime: t.copyStartTime, copyEndTime: t.copyEndTime,
+        videoProducer: t.videoProducer, videoStartTime: t.videoStartTime,
+        videoEndTime: t.videoEndTime, publishTime: t.publishTime,
+      }));
+    },
+    rpcMutate: async (value) => {
+      const payload = value.map(t => ({
+        cardProduct: t.cardProduct, topicName: t.topicName,
+        publishAccount: t.publishAccount, copywriter: t.copywriter,
+        copyStartTime: t.copyStartTime, copyEndTime: t.copyEndTime,
+        videoProducer: t.videoProducer, videoStartTime: t.videoStartTime,
+        videoEndTime: t.videoEndTime, publishTime: t.publishTime,
+      }));
+      await utils.client.task.bulkReplace.mutate(payload);
+    },
   });
-  const bulkReplace = trpc.task.bulkReplace.useMutation({
-    onSuccess: () => utils.task.list.invalidate(),
-  });
 
-  const mockTasks: PositionTask[] = [
-    { id: '1', cardProduct: '电信星耀卡', topicName: '19元185G全国流量', publishAccount: '@流量卡测评君', copywriter: '张三', copyStartTime: '2026-05-19', copyEndTime: '2026-05-20', videoProducer: '李四', videoStartTime: '2026-05-20', videoEndTime: '2026-05-21', publishTime: '2026-05-22T20:00' },
-    { id: '2', cardProduct: '移动潮玩卡', topicName: '39元200G超大流量', publishAccount: '@手机卡推荐', copywriter: '王五', copyStartTime: '2026-05-19', copyEndTime: '2026-05-21', videoProducer: '赵六', videoStartTime: '2026-05-21', videoEndTime: '2026-05-22', publishTime: '2026-05-23T18:00' },
-    { id: '3', cardProduct: '联通天王卡', topicName: '29元220G通用流量', publishAccount: '@通信达人', copywriter: '张三', copyStartTime: '2026-05-18', copyEndTime: '2026-05-19', videoProducer: '李四', videoStartTime: '2026-05-19', videoEndTime: '2026-05-20', publishTime: '2026-05-21T19:00' },
-  ];
-
-  const loadLocalTasks = (): PositionTask[] | null => {
-    try {
-      const saved = localStorage.getItem('anqing_position_process');
-      if (saved) return JSON.parse(saved);
-    } catch { /* ignore */ }
-    return null;
-  };
-
-  const [tasks, setTasks] = useState<PositionTask[]>(() => loadLocalTasks() || mockTasks);
   const [headers, setHeaders] = useState<string[]>(DEFAULT_HEADERS);
-
-  // Sync from server when backend is online
-  useEffect(() => {
-    if (backendOnline === true && serverTasks && serverTasks.length > 0) {
-      setTasks(serverTasks.map((t: any) => ({
-        id: String(t.id),
-        cardProduct: t.cardProduct,
-        topicName: t.topicName,
-        publishAccount: t.publishAccount,
-        copywriter: t.copywriter,
-        copyStartTime: t.copyStartTime,
-        copyEndTime: t.copyEndTime,
-        videoProducer: t.videoProducer,
-        videoStartTime: t.videoStartTime,
-        videoEndTime: t.videoEndTime,
-        publishTime: t.publishTime,
-      })));
-    }
-  }, [serverTasks, backendOnline]);
-
-  // Auto-save
-  useEffect(() => {
-    if (tasks.length === 0) return;
-    const timeout = setTimeout(() => {
-      if (backendOnline === true) {
-        const payload = tasks.map(t => ({
-          cardProduct: t.cardProduct, topicName: t.topicName,
-          publishAccount: t.publishAccount, copywriter: t.copywriter,
-          copyStartTime: t.copyStartTime, copyEndTime: t.copyEndTime,
-          videoProducer: t.videoProducer, videoStartTime: t.videoStartTime,
-          videoEndTime: t.videoEndTime, publishTime: t.publishTime,
-        }));
-        bulkReplace.mutate(payload);
-      } else {
-        try { localStorage.setItem('anqing_position_process', JSON.stringify(tasks)); } catch { /* ignore */ }
-      }
-    }, 2000);
-    return () => clearTimeout(timeout);
-  }, [tasks, backendOnline]);
 
   // Sync locked topics from TitleSelect
   useEffect(() => {
     const lockedTopics = state.lockedTopics;
     if (lockedTopics.length === 0) return;
-    setTasks(prev => {
-      const existingNames = new Set(prev.map(t => t.topicName));
-      const newTasks = lockedTopics.filter(name => !existingNames.has(name)).map(name => ({ ...emptyTask(), topicName: name }));
-      if (newTasks.length === 0) return prev;
-      return [...prev, ...newTasks];
-    });
+    const existingNames = new Set(tasks.map(t => t.topicName));
+    const newTasks = lockedTopics.filter(name => !existingNames.has(name)).map(name => ({ ...emptyTask(), topicName: name }));
+    if (newTasks.length > 0) setTasks([...tasks, ...newTasks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.lockedTopics]);
 
   const addRow = () => setTasks(p => [...p, emptyTask()]);
@@ -295,11 +253,13 @@ export default function PositionProcess() {
             <ArrowLeft className="w-4 h-4 text-white/60" />
           </Link>
           <div>
-            <h2 className="text-xl flex items-center gap-2" style={{ fontFamily: '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif', fontWeight: 700, color: '#a78bfa' }}>
+            <h2 className="text-xl flex items-center gap-2" style={{ fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif', fontWeight: 700, color: '#a78bfa' }}>
               <Workflow className="w-5 h-5" />岗位进程
             </h2>
             <p className="text-xs text-white/40 mt-0.5">跟踪各岗位任务进度</p>
           </div>
+          {syncing && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-4" title="正在同步..." />}
+          {backendAvailable && !syncing && <span className="text-[10px] text-emerald-400 ml-4 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />云端同步中</span>}
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer" style={{ background: 'rgba(245,158,11,0.2)', color: '#fbbf24' }}>

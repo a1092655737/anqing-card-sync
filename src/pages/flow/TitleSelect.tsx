@@ -1,8 +1,9 @@
-import { ArrowLeft, FileSearch, Plus, ChevronDown, ChevronRight, Edit3, Check, X, ThumbsUp, HelpCircle, Play, Square, MoreHorizontal, ArrowUp, ArrowDown, Lock, Unlock, Save, Image, Trash2, Upload, Download } from 'lucide-react';
+import { ArrowLeft, FileSearch, Plus, ChevronDown, ChevronRight, Edit3, Check, X, ThumbsUp, HelpCircle, Play, Square, MoreHorizontal, ArrowUp, ArrowDown, Lock, Unlock, Image, Trash2, Upload, Download, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '@/context/DataContext';
 import { trpc } from '@/providers/trpc';
+import { useSyncedState } from '@/hooks/useSyncedState';
 
 interface TitleItem {
   id: string;
@@ -21,10 +22,7 @@ interface TitleItem {
   createdAt: string;
 }
 
-interface DateGroup {
-  date: string;
-  titles: TitleItem[];
-}
+interface DateGroup { date: string; titles: TitleItem[]; }
 
 const emptyItem = (date: string): TitleItem => ({
   id: 'new_' + Date.now().toString() + '_' + Math.random().toString(36).slice(2, 6),
@@ -35,6 +33,12 @@ const emptyItem = (date: string): TitleItem => ({
   finalDecision: 'execute', rowHighlight: 'none',
   createdAt: date,
 });
+
+const mockTitles: TitleItem[] = [
+  { id: '1', name: '电信星耀卡——19元185G全国流量', direction: '突出大流量低月租优势，面向学生群体', reference: '类似电信星北卡推广样式', referenceImages: [], directorSuggest: '采用对比式开头，先展示原套餐价格再引出优惠', directorVote: 'agree', editorSuggest: '加入动态数字跳动效果，突出185G', editorVote: 'pending', operatorSuggest: '发布时间选择晚间8-10点', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-19' },
+  { id: '2', name: '移动潮玩卡39元200G超大流量', direction: '强调游戏场景，针对年轻用户', reference: '参考移动春明卡的风格', referenceImages: [], directorSuggest: '用游戏画面作为背景引入', directorVote: 'pending', editorSuggest: '添加游戏角色配音', editorVote: 'pending', operatorSuggest: '搭配游戏话题标签', operatorVote: 'pending', finalDecision: 'reject', rowHighlight: 'none', createdAt: '2026-05-19' },
+  { id: '3', name: '联通天王卡29元220G通用流量', direction: '主打性价比，对比竞品', reference: '参考联通福多多的推广', referenceImages: [], directorSuggest: '采用真人测评形式', directorVote: 'agree', editorSuggest: '快节奏剪辑，3秒一个镜头', editorVote: 'agree', operatorSuggest: '投放时间在周末流量高峰', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-18' },
+];
 
 const COLS = [
   { key: 'name', label: '选题名称', color: '#a78bfa', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.2)' },
@@ -68,7 +72,6 @@ const DecisionButton = ({ value, onChange, onDouble, locked }: { value: 'execute
   </div>
 );
 
-// ===== Reference Cell: text + image upload =====
 const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
   text: string; images: string[];
   onTextChange: (v: string) => void;
@@ -76,47 +79,35 @@ const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
   locked: boolean;
 }) => {
   const fileRef = useRef<HTMLInputElement>(null);
-
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
     Array.from(files).forEach(file => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        onImagesChange([...images, dataUrl]);
-      };
+      reader.onload = () => { onImagesChange([...images, reader.result as string]); };
       reader.readAsDataURL(file);
     });
     e.target.value = '';
   };
-
-  const removeImage = (idx: number) => {
-    onImagesChange(images.filter((_, i) => i !== idx));
-  };
-
   return (
     <div className={`p-3 ${locked ? 'pointer-events-none opacity-40' : ''}`} style={{ background: COLS[2].bg }}>
-      <textarea
-        value={text}
-        onChange={e => onTextChange(e.target.value)}
-        rows={images.length > 0 ? 2 : 4}
-        className="w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400/40 placeholder-gray-400 leading-relaxed mb-2"
-        placeholder="参考样式..."
-      />
+      <textarea value={text} onChange={e => onTextChange(e.target.value)} rows={images.length > 0 ? 2 : 4}
+        className="w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none placeholder-gray-400 leading-relaxed mb-2"
+        placeholder="参考样式..." />
       <div className="flex items-center gap-2 mb-2">
         <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/25 transition-all border border-emerald-500/10">
           <Image className="w-3 h-3" /> 上传图片
         </button>
         <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFile} className="hidden" />
-        {images.length > 0 && <span className="text-[10px] text-white/40">{images.length} 张图片</span>}
+        {images.length > 0 && <span className="text-[10px] text-white/40">{images.length} 张</span>}
       </div>
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {images.map((img, idx) => (
             <div key={idx} className="relative group/img">
               <img src={img} alt={`参考 ${idx + 1}`} className="w-16 h-16 object-cover rounded-lg border border-white/10 cursor-pointer hover:border-emerald-400/50 transition-colors" onClick={() => window.open(img, '_blank')} />
-              <button onClick={() => removeImage(idx)} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+              <button onClick={() => onImagesChange(images.filter((_, i) => i !== idx))}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
                 <Trash2 className="w-2.5 h-2.5 text-white" />
               </button>
             </div>
@@ -128,48 +119,38 @@ const ReferenceCell = ({ text, images, onTextChange, onImagesChange, locked }: {
 };
 
 export default function TitleSelect() {
-  const { state, addLockedTopics, removeLockedTopics } = useData();
+  const { addLockedTopics, removeLockedTopics } = useData();
   const utils = trpc.useUtils();
 
-  // Detect if backend is online (ping test)
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
-  useEffect(() => {
-    fetch('/api/trpc/ping')
-      .then(r => r.ok ? setBackendOnline(true) : setBackendOnline(false))
-      .catch(() => setBackendOnline(false));
-  }, []);
-
-  // tRPC: only enabled when backend is detected online
-  const { data: serverTitles } = trpc.title.list.useQuery(undefined, {
-    enabled: backendOnline === true,
-    retry: false,
-    staleTime: Infinity,
+  // Unified sync: localStorage + backend
+  const { data: titles, setData: setTitles, syncing, backendAvailable } = useSyncedState<TitleItem[]>({
+    localKey: 'aq_title_select_v2',
+    defaultValue: mockTitles,
+    rpcQuery: async () => {
+      const items = await utils.client.title.list.query();
+      return items.map((t: any) => ({
+        id: String(t.id), name: t.name, direction: t.direction,
+        reference: t.reference, referenceImages: (t.referenceImages as string[]) || [],
+        directorSuggest: t.directorSuggest, directorVote: t.directorVote,
+        editorSuggest: t.editorSuggest, editorVote: t.editorVote,
+        operatorSuggest: t.operatorSuggest, operatorVote: t.operatorVote,
+        finalDecision: t.finalDecision, rowHighlight: t.rowHighlight,
+        createdAt: t.createdAt,
+      }));
+    },
+    rpcMutate: async (value) => {
+      const payload = value.map(t => ({
+        name: t.name, direction: t.direction, reference: t.reference,
+        referenceImages: t.referenceImages, directorSuggest: t.directorSuggest,
+        directorVote: t.directorVote, editorSuggest: t.editorSuggest,
+        editorVote: t.editorVote, operatorSuggest: t.operatorSuggest,
+        operatorVote: t.operatorVote, finalDecision: t.finalDecision,
+        rowHighlight: t.rowHighlight, createdAt: t.createdAt,
+      }));
+      await utils.client.title.bulkReplace.mutate(payload);
+    },
   });
-  const bulkReplace = trpc.title.bulkReplace.useMutation({
-    onSuccess: () => utils.title.list.invalidate(),
-  });
 
-  // Default mock data
-  const mockTitles: TitleItem[] = [
-    { id: '1', name: '电信星耀卡——19元185G全国流量', direction: '突出大流量低月租优势，面向学生群体', reference: '类似电信星北卡推广样式', referenceImages: [], directorSuggest: '采用对比式开头，先展示原套餐价格再引出优惠', directorVote: 'agree', editorSuggest: '加入动态数字跳动效果，突出185G', editorVote: 'pending', operatorSuggest: '发布时间选择晚间8-10点', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-19' },
-    { id: '2', name: '移动潮玩卡39元200G超大流量', direction: '强调游戏场景，针对年轻用户', reference: '参考移动春明卡的风格', referenceImages: [], directorSuggest: '用游戏画面作为背景引入', directorVote: 'pending', editorSuggest: '添加游戏角色配音', editorVote: 'pending', operatorSuggest: '搭配游戏话题标签', operatorVote: 'pending', finalDecision: 'reject', rowHighlight: 'none', createdAt: '2026-05-19' },
-    { id: '3', name: '联通天王卡29元220G通用流量', direction: '主打性价比，对比竞品', reference: '参考联通福多多的推广', referenceImages: [], directorSuggest: '采用真人测评形式', directorVote: 'agree', editorSuggest: '快节奏剪辑，3秒一个镜头', editorVote: 'agree', operatorSuggest: '投放时间在周末流量高峰', operatorVote: 'agree', finalDecision: 'execute', rowHighlight: 'none', createdAt: '2026-05-18' },
-  ];
-
-  // Load from localStorage
-  const loadLocalTitles = (): TitleItem[] | null => {
-    try {
-      const saved = localStorage.getItem('anqing_title_select');
-      if (saved) return JSON.parse(saved);
-    } catch { /* ignore */ }
-    return null;
-  };
-
-  // Local state
-  const [titles, setTitles] = useState<TitleItem[]>(() => {
-    // Initial load: try localStorage first, fallback to mock data
-    return loadLocalTitles() || mockTitles;
-  });
   const [showAdd, setShowAdd] = useState(false);
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
   const [editingDate, setEditingDate] = useState<string | null>(null);
@@ -179,99 +160,53 @@ export default function TitleSelect() {
   const [rowMenuOpen, setRowMenuOpen] = useState<string | null>(null);
   const [lockedDates, setLockedDates] = useState<Set<string>>(new Set());
 
-  // Sync from server when backend is online
-  useEffect(() => {
-    if (backendOnline === true && serverTitles && serverTitles.length > 0) {
-      const mapped: TitleItem[] = serverTitles.map((t: any) => ({
-        id: String(t.id),
-        name: t.name,
-        direction: t.direction,
-        reference: t.reference,
-        referenceImages: (t.referenceImages as string[]) || [],
-        directorSuggest: t.directorSuggest,
-        directorVote: t.directorVote as 'agree' | 'pending',
-        editorSuggest: t.editorSuggest,
-        editorVote: t.editorVote as 'agree' | 'pending',
-        operatorSuggest: t.operatorSuggest,
-        operatorVote: t.operatorVote as 'agree' | 'pending',
-        finalDecision: t.finalDecision as 'execute' | 'reject',
-        rowHighlight: t.rowHighlight as 'none' | 'green' | 'red',
-        createdAt: t.createdAt,
-      }));
-      setTitles(mapped);
-    }
-  }, [serverTitles, backendOnline]);
-
-  // Auto-save
-  useEffect(() => {
-    if (titles.length === 0) return;
-    const timeout = setTimeout(() => {
-      if (backendOnline === true) {
-        // Backend online: save to server
-        const payload = titles.map(t => ({
-          name: t.name, direction: t.direction, reference: t.reference,
-          referenceImages: t.referenceImages, directorSuggest: t.directorSuggest,
-          directorVote: t.directorVote, editorSuggest: t.editorSuggest,
-          editorVote: t.editorVote, operatorSuggest: t.operatorSuggest,
-          operatorVote: t.operatorVote, finalDecision: t.finalDecision,
-          rowHighlight: t.rowHighlight, createdAt: t.createdAt,
-        }));
-        bulkReplace.mutate(payload);
-      } else {
-        // Backend offline: save to localStorage
-        try { localStorage.setItem('anqing_title_select', JSON.stringify(titles)); } catch { /* ignore */ }
-      }
-    }, 2000);
-    return () => clearTimeout(timeout);
-  }, [titles, backendOnline]);
-
   const grouped: DateGroup[] = useMemo(() => {
     const map = new Map<string, TitleItem[]>();
     titles.forEach(t => { const list = map.get(t.createdAt) || []; list.push(t); map.set(t.createdAt, list); });
     return Array.from(map.entries()).map(([date, items]) => ({ date, titles: items })).sort((a, b) => b.date.localeCompare(a.date));
   }, [titles]);
 
-  const toggleCollapse = (date: string) => {
-    setCollapsedDates(prev => { const next = new Set(prev); if (next.has(date)) next.delete(date); else next.add(date); return next; });
-  };
-  const startEditDate = (date: string) => { setEditingDate(date); setDateEdits(prev => ({ ...prev, [date]: date })); };
+  const toggleCollapse = (date: string) => { setCollapsedDates(p => { const n = new Set(p); n.has(date) ? n.delete(date) : n.add(date); return n; }); };
+  const startEditDate = (date: string) => { setEditingDate(date); setDateEdits(p => ({ ...p, [date]: date })); };
   const saveEditDate = (oldDate: string) => { const newDate = dateEdits[oldDate]; if (newDate && newDate !== oldDate) setTitles(titles.map(t => t.createdAt === oldDate ? { ...t, createdAt: newDate } : t)); setEditingDate(null); };
   const cancelEditDate = () => setEditingDate(null);
 
   const toggleLock = (date: string) => {
-    setLockedDates(prev => {
-      const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-        const topicsToRemove = titles.filter(t => t.createdAt === date).map(t => t.name).filter(n => n.trim() !== '');
-        if (topicsToRemove.length > 0) removeLockedTopics(topicsToRemove);
+    setLockedDates(p => {
+      const n = new Set(p);
+      if (n.has(date)) {
+        n.delete(date);
+        const toRemove = titles.filter(t => t.createdAt === date).map(t => t.name).filter(Boolean);
+        if (toRemove.length) removeLockedTopics(toRemove);
       } else {
-        next.add(date);
-        const topicsToAdd = titles.filter(t => t.createdAt === date).map(t => t.name).filter(n => n.trim() !== '');
-        if (topicsToAdd.length > 0) addLockedTopics(topicsToAdd);
+        n.add(date);
+        const toAdd = titles.filter(t => t.createdAt === date).map(t => t.name).filter(Boolean);
+        if (toAdd.length) addLockedTopics(toAdd);
       }
-      return next;
+      return n;
     });
   };
 
   const addTitle = () => {
     if (!newForm.name.trim()) return;
     const today = new Date().toISOString().split('T')[0];
-    setTitles([{ id: Date.now().toString(), name: newForm.name.trim(), direction: newForm.direction.trim(), reference: newForm.reference.trim(), referenceImages: [], directorSuggest: newForm.directorSuggest.trim(), directorVote: 'pending', editorSuggest: newForm.editorSuggest.trim(), editorVote: 'pending', operatorSuggest: newForm.operatorSuggest.trim(), operatorVote: 'pending', finalDecision: 'execute', rowHighlight: 'none', createdAt: today }, ...titles]);
+    setTitles([{ ...emptyItem(today), name: newForm.name.trim(), direction: newForm.direction.trim(), reference: newForm.reference.trim(), directorSuggest: newForm.directorSuggest.trim(), editorSuggest: newForm.editorSuggest.trim(), operatorSuggest: newForm.operatorSuggest.trim() }, ...titles]);
     setNewForm({ name: '', direction: '', reference: '', directorSuggest: '', editorSuggest: '', operatorSuggest: '' });
     setShowAdd(false);
   };
-  const updateField = (id: string, field: keyof TitleItem, value: string | string[]) => setTitles(titles.map(t => t.id === id ? { ...t, [field]: value } : t));
+
+  const updateField = (id: string, field: keyof TitleItem, value: string | string[]) => {
+    setTitles(titles.map(t => t.id === id ? { ...t, [field]: value } : t));
+  };
   const deleteTitle = (id: string) => setTitles(titles.filter(t => t.id !== id));
 
   const insertRow = (date: string, index: number, direction: 'above' | 'below') => {
-    const item = emptyItem(date);
     let flatIdx = titles.findIndex(t => t.createdAt === date);
     if (flatIdx === -1) flatIdx = 0;
     flatIdx += direction === 'above' ? index : index + 1;
-    const newTitles = [...titles];
-    newTitles.splice(Math.min(flatIdx, newTitles.length), 0, item);
-    setTitles(newTitles);
+    const n = [...titles];
+    n.splice(Math.min(flatIdx, n.length), 0, emptyItem(date));
+    setTitles(n);
     setRowMenuOpen(null);
   };
 
@@ -288,11 +223,11 @@ export default function TitleSelect() {
   const formInput = (label: string, value: string, onChange: (v: string) => void, placeholder: string) => (
     <div className="mb-3">
       <label className="text-[11px] text-white/50 mb-1.5 block font-medium">{label}</label>
-      <input type="text" value={value} onChange={e => onChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTitle()} placeholder={placeholder} className="w-full bg-white text-gray-900 text-sm font-semibold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/40 placeholder-gray-400" />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTitle()} placeholder={placeholder}
+        className="w-full bg-white text-gray-900 text-sm font-semibold px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/40 placeholder-gray-400" />
     </div>
   );
 
-  // Export data
   const exportData = () => {
     const data = JSON.stringify({ titles, exportTime: new Date().toISOString(), version: '1.0' }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
@@ -309,10 +244,7 @@ export default function TitleSelect() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result as string);
-        if (data.titles && Array.isArray(data.titles)) setTitles(data.titles);
-      } catch { /* ignore */ }
+      try { const data = JSON.parse(reader.result as string); if (data.titles && Array.isArray(data.titles)) setTitles(data.titles); } catch { /* ignore */ }
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -331,12 +263,13 @@ export default function TitleSelect() {
           </h2>
           <p className="text-xs text-white/40 mt-0.5">管理和评估产品推广标题</p>
         </div>
+        {syncing && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-auto" title="正在同步..." />}
+        {backendAvailable && !syncing && <span className="text-[10px] text-emerald-400 ml-auto flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />云端同步中</span>}
       </div>
 
       <div className="flex justify-end mb-4 gap-3">
         <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 text-amber-300 text-sm font-medium hover:bg-amber-500/30 transition-colors cursor-pointer">
-          <Upload className="w-4 h-4" /> 导入
-          <input type="file" accept=".json" onChange={importData} className="hidden" />
+          <Upload className="w-4 h-4" /> 导入 <input type="file" accept=".json" onChange={importData} className="hidden" />
         </label>
         <button onClick={exportData} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/20 text-sky-300 text-sm font-medium hover:bg-sky-500/30 transition-colors">
           <Download className="w-4 h-4" /> 导出
@@ -348,17 +281,24 @@ export default function TitleSelect() {
 
       {showAdd && (
         <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-purple-500/5 p-5 mb-5">
-          {formInput('选题名称', newForm.name, v => setNewForm({ ...newForm, name: v }), '输入选题名称...')}
-          {formInput('选题方向及思考', newForm.direction, v => setNewForm({ ...newForm, direction: v }), '输入选题方向和思考...')}
-          {formInput('参考样式', newForm.reference, v => setNewForm({ ...newForm, reference: v }), '输入参考样式...')}
-          {formInput('编导建议', newForm.directorSuggest, v => setNewForm({ ...newForm, directorSuggest: v }), '输入编导建议...')}
-          {formInput('剪辑建议', newForm.editorSuggest, v => setNewForm({ ...newForm, editorSuggest: v }), '输入剪辑建议...')}
-          {formInput('运营建议', newForm.operatorSuggest, v => setNewForm({ ...newForm, operatorSuggest: v }), '输入运营建议...')}
+          {formInput('选题名称', newForm.name, v => setNewForm(p => ({ ...p, name: v })), '输入选题名称...')}
+          {formInput('选题方向及思考', newForm.direction, v => setNewForm(p => ({ ...p, direction: v })), '输入选题方向和思考...')}
+          {formInput('参考样式', newForm.reference, v => setNewForm(p => ({ ...p, reference: v })), '输入参考样式...')}
+          {formInput('编导建议', newForm.directorSuggest, v => setNewForm(p => ({ ...p, directorSuggest: v })), '输入编导建议...')}
+          {formInput('剪辑建议', newForm.editorSuggest, v => setNewForm(p => ({ ...p, editorSuggest: v })), '输入剪辑建议...')}
+          {formInput('运营建议', newForm.operatorSuggest, v => setNewForm(p => ({ ...p, operatorSuggest: v })), '输入运营建议...')}
           <button onClick={addTitle} className="w-full px-4 py-2.5 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors shadow-lg shadow-violet-500/20">添加选题</button>
         </div>
       )}
 
       <div className="space-y-4">
+        {grouped.length === 0 && (
+          <div className="text-center py-20 text-white/30">
+            <FileSearch className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p className="text-sm">暂无选题数据</p>
+            <p className="text-xs mt-2">点击上方「新增选题」按钮添加</p>
+          </div>
+        )}
         {grouped.map(group => {
           const isCollapsed = collapsedDates.has(group.date);
           const isEditing = editingDate === group.date;
@@ -374,9 +314,7 @@ export default function TitleSelect() {
                   </button>
                   {isEditing ? (
                     <div className="flex items-center gap-2">
-                      <input type="text" value={dateEdits[group.date] || group.date}
-                        onChange={e => setDateEdits(prev => ({ ...prev, [group.date]: e.target.value }))}
-                        onKeyDown={e => { if (e.key === 'Enter') saveEditDate(group.date); if (e.key === 'Escape') cancelEditDate(); }}
+                      <input type="text" value={dateEdits[group.date] || group.date} onChange={e => setDateEdits(p => ({ ...p, [group.date]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') saveEditDate(group.date); if (e.key === 'Escape') cancelEditDate(); }}
                         className="px-2 py-1 rounded bg-white text-gray-900 text-sm font-bold border border-gray-300 focus:border-violet-400 outline-none w-32" autoFocus />
                       <button onClick={() => saveEditDate(group.date)} className="w-6 h-6 rounded bg-emerald-500/20 flex items-center justify-center hover:bg-emerald-500/30"><Check className="w-3.5 h-3.5 text-emerald-400" /></button>
                       <button onClick={cancelEditDate} className="w-6 h-6 rounded bg-red-500/20 flex items-center justify-center hover:bg-red-500/30"><X className="w-3.5 h-3.5 text-red-400" /></button>
@@ -384,9 +322,7 @@ export default function TitleSelect() {
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-white">{group.date}</span>
-                      <button onClick={() => startEditDate(group.date)} className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center hover:bg-violet-500/30 transition-colors">
-                        <Edit3 className="w-3.5 h-3.5 text-violet-400" />
-                      </button>
+                      <button onClick={() => startEditDate(group.date)} className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center hover:bg-violet-500/30 transition-colors"><Edit3 className="w-3.5 h-3.5 text-violet-400" /></button>
                     </div>
                   )}
                   <span className="text-[10px] text-white/25 px-2 py-0.5 rounded-full bg-white/5">{group.titles.length} 条</span>
@@ -422,77 +358,69 @@ export default function TitleSelect() {
 
               {!isCollapsed && (
                 <>
-                <div className="grid grid-cols-7 gap-0 border-b border-white/[0.06]">
-                  {COLS.map(c => (
-                    <div key={c.key} className="px-3 py-2.5 text-center" style={{ background: c.bg, borderRight: `1px solid ${c.border}` }}>
-                      <span className="text-[15px] font-black tracking-wide text-[#a78bfa]" style={{ fontFamily: "'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" }}>{c.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="relative">
-                  {group.titles.map((t, idx) => (
-                    <div key={t.id} className={`grid grid-cols-7 gap-0 ${idx !== group.titles.length - 1 ? 'border-b border-white/[0.04]' : ''}`} style={rowBg(t.rowHighlight)}>
-                      <div className="p-3" style={{ background: COLS[0].bg }}>
-                        <textarea value={t.name} onChange={e => updateField(t.id, 'name', e.target.value)} rows={4} readOnly={isLocked}
-                          className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-400/40 placeholder-gray-400 leading-relaxed ${isLocked ? 'opacity-50' : ''}`} placeholder="选题名称..." />
+                  <div className="grid grid-cols-7 gap-0 border-b border-white/[0.06]">
+                    {COLS.map(c => (
+                      <div key={c.key} className="px-3 py-2.5 text-center" style={{ background: c.bg, borderRight: `1px solid ${c.border}` }}>
+                        <span className="text-[15px] font-black tracking-wide text-[#a78bfa]" style={{ fontFamily: "'PingFang SC', 'Microsoft YaHei', sans-serif" }}>{c.label}</span>
                       </div>
-                      <div className="p-3" style={{ background: COLS[1].bg }}>
-                        <textarea value={t.direction} onChange={e => updateField(t.id, 'direction', e.target.value)} rows={4} readOnly={isLocked}
-                          className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/40 placeholder-gray-400 leading-relaxed ${isLocked ? 'opacity-50' : ''}`} placeholder="选题方向及思考..." />
-                      </div>
-                      <ReferenceCell
-                        text={t.reference}
-                        images={t.referenceImages}
-                        onTextChange={v => updateField(t.id, 'reference', v)}
-                        onImagesChange={imgs => updateField(t.id, 'referenceImages', imgs)}
-                        locked={isLocked}
-                      />
-                      <div className="p-3" style={{ background: COLS[3].bg }}>
-                        <textarea value={t.directorSuggest} onChange={e => updateField(t.id, 'directorSuggest', e.target.value)} rows={3} readOnly={isLocked}
-                          className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-400/40 placeholder-gray-400 leading-relaxed mb-2 ${isLocked ? 'opacity-50' : ''}`} placeholder="编导建议..." />
-                        <VoteButton value={t.directorVote} onChange={v => updateField(t.id, 'directorVote', v)} locked={isLocked} />
-                      </div>
-                      <div className="p-3" style={{ background: COLS[4].bg }}>
-                        <textarea value={t.editorSuggest} onChange={e => updateField(t.id, 'editorSuggest', e.target.value)} rows={3} readOnly={isLocked}
-                          className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-orange-400/40 placeholder-gray-400 leading-relaxed mb-2 ${isLocked ? 'opacity-50' : ''}`} placeholder="剪辑建议..." />
-                        <VoteButton value={t.editorVote} onChange={v => updateField(t.id, 'editorVote', v)} locked={isLocked} />
-                      </div>
-                      <div className="p-3" style={{ background: COLS[5].bg }}>
-                        <textarea value={t.operatorSuggest} onChange={e => updateField(t.id, 'operatorSuggest', e.target.value)} rows={3} readOnly={isLocked}
-                          className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-cyan-400/40 placeholder-gray-400 leading-relaxed mb-2 ${isLocked ? 'opacity-50' : ''}`} placeholder="运营建议..." />
-                        <VoteButton value={t.operatorVote} onChange={v => updateField(t.id, 'operatorVote', v)} locked={isLocked} />
-                      </div>
-                      <div className="p-3 flex flex-col justify-between relative" style={{ background: COLS[6].bg }}>
-                        <div className="flex-1 flex flex-col justify-center items-center mb-2">
-                          <DecisionButton value={t.finalDecision} onChange={v => updateField(t.id, 'finalDecision', v)} onDouble={(d) => handleDecisionDouble(t.id, d)} locked={isLocked} />
+                    ))}
+                  </div>
+                  <div className="relative">
+                    {group.titles.map((t, idx) => (
+                      <div key={t.id} className={`grid grid-cols-7 gap-0 ${idx !== group.titles.length - 1 ? 'border-b border-white/[0.04]' : ''}`} style={rowBg(t.rowHighlight)}>
+                        <div className="p-3" style={{ background: COLS[0].bg }}>
+                          <textarea value={t.name} onChange={e => updateField(t.id, 'name', e.target.value)} rows={4} readOnly={isLocked}
+                            className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-violet-400/40 placeholder-gray-400 leading-relaxed ${isLocked ? 'opacity-50' : ''}`} placeholder="选题名称..." />
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => setRowMenuOpen(rowMenuOpen === t.id ? null : t.id)}
-                            className="flex-1 px-2 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-[10px] font-medium hover:bg-blue-500/25 transition-all flex items-center justify-center gap-1 border border-blue-500/10 hover:border-blue-500/30">
-                            <Plus className="w-3 h-3" /> 添加
-                          </button>
-                          <button onClick={() => deleteTitle(t.id)}
-                            className="flex-1 px-2 py-2 rounded-lg bg-red-500/10 text-red-400 text-[10px] font-medium hover:bg-red-500/25 transition-all flex items-center justify-center gap-1 border border-red-500/10 hover:border-red-500/30">
-                            <X className="w-3 h-3" /> 删除
-                          </button>
+                        <div className="p-3" style={{ background: COLS[1].bg }}>
+                          <textarea value={t.direction} onChange={e => updateField(t.id, 'direction', e.target.value)} rows={4} readOnly={isLocked}
+                            className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/40 placeholder-gray-400 leading-relaxed ${isLocked ? 'opacity-50' : ''}`} placeholder="选题方向及思考..." />
                         </div>
-                        {rowMenuOpen === t.id && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setRowMenuOpen(null)} />
-                            <div className="absolute right-3 bottom-14 z-50 min-w-[140px] rounded-xl bg-[#1e1b4b] border border-white/10 shadow-2xl py-2">
-                              <button onClick={() => insertRow(group.date, idx, 'above')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] text-white/70 hover:bg-white/5 transition-colors">
-                                <ArrowUp className="w-3 h-3 text-blue-400" /> 向上增加一行
-                              </button>
-                              <button onClick={() => insertRow(group.date, idx, 'below')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] text-white/70 hover:bg-white/5 transition-colors">
-                                <ArrowDown className="w-3 h-3 text-blue-400" /> 向下增加一行
-                              </button>
-                            </div>
-                          </>
-                        )}
+                        <ReferenceCell text={t.reference} images={t.referenceImages} onTextChange={v => updateField(t.id, 'reference', v)} onImagesChange={imgs => updateField(t.id, 'referenceImages', imgs)} locked={isLocked} />
+                        <div className="p-3" style={{ background: COLS[3].bg }}>
+                          <textarea value={t.directorSuggest} onChange={e => updateField(t.id, 'directorSuggest', e.target.value)} rows={3} readOnly={isLocked}
+                            className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-400/40 placeholder-gray-400 leading-relaxed mb-2 ${isLocked ? 'opacity-50' : ''}`} placeholder="编导建议..." />
+                          <VoteButton value={t.directorVote} onChange={v => updateField(t.id, 'directorVote', v)} locked={isLocked} />
+                        </div>
+                        <div className="p-3" style={{ background: COLS[4].bg }}>
+                          <textarea value={t.editorSuggest} onChange={e => updateField(t.id, 'editorSuggest', e.target.value)} rows={3} readOnly={isLocked}
+                            className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-orange-400/40 placeholder-gray-400 leading-relaxed mb-2 ${isLocked ? 'opacity-50' : ''}`} placeholder="剪辑建议..." />
+                          <VoteButton value={t.editorVote} onChange={v => updateField(t.id, 'editorVote', v)} locked={isLocked} />
+                        </div>
+                        <div className="p-3" style={{ background: COLS[5].bg }}>
+                          <textarea value={t.operatorSuggest} onChange={e => updateField(t.id, 'operatorSuggest', e.target.value)} rows={3} readOnly={isLocked}
+                            className={`w-full bg-white text-gray-900 text-[13px] font-bold px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-cyan-400/40 placeholder-gray-400 leading-relaxed mb-2 ${isLocked ? 'opacity-50' : ''}`} placeholder="运营建议..." />
+                          <VoteButton value={t.operatorVote} onChange={v => updateField(t.id, 'operatorVote', v)} locked={isLocked} />
+                        </div>
+                        <div className="p-3 flex flex-col justify-between relative" style={{ background: COLS[6].bg }}>
+                          <div className="flex-1 flex flex-col justify-center items-center mb-2">
+                            <DecisionButton value={t.finalDecision} onChange={v => updateField(t.id, 'finalDecision', v)} onDouble={(d) => handleDecisionDouble(t.id, d)} locked={isLocked} />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => setRowMenuOpen(rowMenuOpen === t.id ? null : t.id)} className="flex-1 px-2 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-[10px] font-medium hover:bg-blue-500/25 transition-all flex items-center justify-center gap-1 border border-blue-500/10 hover:border-blue-500/30">
+                              <Plus className="w-3 h-3" /> 添加
+                            </button>
+                            <button onClick={() => deleteTitle(t.id)} className="flex-1 px-2 py-2 rounded-lg bg-red-500/10 text-red-400 text-[10px] font-medium hover:bg-red-500/25 transition-all flex items-center justify-center gap-1 border border-red-500/10 hover:border-red-500/30">
+                              <X className="w-3 h-3" /> 删除
+                            </button>
+                          </div>
+                          {rowMenuOpen === t.id && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setRowMenuOpen(null)} />
+                              <div className="absolute right-3 bottom-14 z-50 min-w-[140px] rounded-xl bg-[#1e1b4b] border border-white/10 shadow-2xl py-2">
+                                <button onClick={() => insertRow(group.date, idx, 'above')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] text-white/70 hover:bg-white/5 transition-colors">
+                                  <ArrowUp className="w-3 h-3 text-blue-400" /> 向上增加一行
+                                </button>
+                                <button onClick={() => insertRow(group.date, idx, 'below')} className="w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] text-white/70 hover:bg-white/5 transition-colors">
+                                  <ArrowDown className="w-3 h-3 text-blue-400" /> 向下增加一行
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
