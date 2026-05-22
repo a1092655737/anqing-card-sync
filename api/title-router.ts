@@ -7,8 +7,10 @@ import { eq, desc } from "drizzle-orm";
 export const titleRouter = createRouter({
   // List all title items
   list: publicQuery.query(async () => {
+    console.log("[title.list] Querying title_items...");
     const db = getDb();
     const items = await db.select().from(titleItems).orderBy(desc(titleItems.id));
+    console.log(`[title.list] Returning ${items.length} items`);
     return items;
   }),
 
@@ -138,10 +140,14 @@ export const titleRouter = createRouter({
       )
     )
     .mutation(async ({ input }) => {
+      console.log(`[title.bulkReplace] Received ${input.length} items`);
       const db = getDb();
       await db.delete(titleItems);
       if (input.length > 0) {
-        await db.insert(titleItems).values(input);
+        const result = await db.insert(titleItems).values(input);
+        console.log(`[title.bulkReplace] Inserted ${input.length} items, result:`, result);
+      } else {
+        console.log(`[title.bulkReplace] Cleared all items`);
       }
       return { count: input.length };
     }),

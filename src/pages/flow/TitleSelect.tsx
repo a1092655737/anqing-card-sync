@@ -123,7 +123,7 @@ export default function TitleSelect() {
   const utils = trpc.useUtils();
 
   // Unified sync: localStorage + backend
-  const { data: titles, setData: setTitles, syncing, backendAvailable } = useSyncedState<TitleItem[]>({
+  const { data: titles, setData: setTitles, syncing, backendAvailable, lastError, lastSyncAt, forcePull } = useSyncedState<TitleItem[]>({
     localKey: 'aq_title_select_v2',
     defaultValue: mockTitles,
     rpcQuery: async () => {
@@ -263,11 +263,35 @@ export default function TitleSelect() {
           </h2>
           <p className="text-xs text-white/40 mt-0.5">管理和评估产品推广标题</p>
         </div>
-        {syncing && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-auto" title="正在同步..." />}
-        {backendAvailable && !syncing && <span className="text-[10px] text-emerald-400 ml-auto flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />云端同步中</span>}
+        {/* Sync status */}
+        <div className="ml-auto flex items-center gap-3">
+          {lastError && (
+            <span className="text-[10px] text-red-400 flex items-center gap-1" title={lastError}>
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />同步异常
+            </span>
+          )}
+          {syncing && (
+            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+              <RefreshCw className="w-3 h-3 animate-spin" />同步中...
+            </span>
+          )}
+          {backendAvailable && !syncing && !lastError && (
+            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />已同步{lastSyncAt ? ` · ${lastSyncAt}` : ''}
+            </span>
+          )}
+          {!backendAvailable && (
+            <span className="text-[10px] text-amber-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />离线模式
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end mb-4 gap-3">
+        <button onClick={forcePull} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-sm font-medium hover:bg-emerald-500/30 transition-colors" title="从云端拉取最新数据">
+          <RefreshCw className="w-4 h-4" /> 刷新同步
+        </button>
         <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 text-amber-300 text-sm font-medium hover:bg-amber-500/30 transition-colors cursor-pointer">
           <Upload className="w-4 h-4" /> 导入 <input type="file" accept=".json" onChange={importData} className="hidden" />
         </label>

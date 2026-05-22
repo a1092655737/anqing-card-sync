@@ -176,7 +176,7 @@ export default function PositionProcess() {
   const { state } = useData();
   const utils = trpc.useUtils();
 
-  const { data: tasks, setData: setTasks, syncing, backendAvailable } = useSyncedState<PositionTask[]>({
+  const { data: tasks, setData: setTasks, syncing, backendAvailable, lastError, lastSyncAt, forcePull } = useSyncedState<PositionTask[]>({
     localKey: 'aq_position_process_v2',
     defaultValue: mockTasks,
     rpcQuery: async () => {
@@ -258,10 +258,34 @@ export default function PositionProcess() {
             </h2>
             <p className="text-xs text-white/40 mt-0.5">跟踪各岗位任务进度</p>
           </div>
-          {syncing && <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin ml-4" title="正在同步..." />}
-          {backendAvailable && !syncing && <span className="text-[10px] text-emerald-400 ml-4 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />云端同步中</span>}
+          {/* Sync status */}
+          <div className="ml-4 flex items-center gap-3">
+            {lastError && (
+              <span className="text-[10px] text-red-400 flex items-center gap-1" title={lastError}>
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />同步异常
+              </span>
+            )}
+            {syncing && (
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3 animate-spin" />同步中...
+              </span>
+            )}
+            {backendAvailable && !syncing && !lastError && (
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />已同步{lastSyncAt ? ` · ${lastSyncAt}` : ''}
+              </span>
+            )}
+            {!backendAvailable && (
+              <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />离线模式
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={forcePull} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer" style={{ background: 'rgba(16,185,129,0.2)', color: '#34d399' }}>
+            <RefreshCw className="w-4 h-4" />刷新同步
+          </button>
           <label className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer" style={{ background: 'rgba(245,158,11,0.2)', color: '#fbbf24' }}>
             <Upload className="w-4 h-4" />导入
             <input type="file" accept=".json" onChange={importData} className="hidden" />

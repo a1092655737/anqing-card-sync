@@ -17,7 +17,7 @@ const trpcClient = trpc.createClient({
       },
       fetch(input, init) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000); // 3s timeout
+        const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout for large payloads
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",

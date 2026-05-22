@@ -7,8 +7,10 @@ import { eq, desc } from "drizzle-orm";
 export const taskRouter = createRouter({
   // List all tasks
   list: publicQuery.query(async () => {
+    console.log("[task.list] Querying position_tasks...");
     const db = getDb();
     const items = await db.select().from(positionTasks).orderBy(desc(positionTasks.id));
+    console.log(`[task.list] Returning ${items.length} items`);
     return items;
   }),
 
@@ -97,10 +99,14 @@ export const taskRouter = createRouter({
       )
     )
     .mutation(async ({ input }) => {
+      console.log(`[task.bulkReplace] Received ${input.length} items`);
       const db = getDb();
       await db.delete(positionTasks);
       if (input.length > 0) {
         await db.insert(positionTasks).values(input);
+        console.log(`[task.bulkReplace] Inserted ${input.length} items`);
+      } else {
+        console.log(`[task.bulkReplace] Cleared all items`);
       }
       return { count: input.length };
     }),
