@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/mysql2";
-import { createPool } from "mysql2/promise";
+import mysql from "mysql2";
 import { env } from "../lib/env";
 import * as schema from "@db/schema";
 import * as relations from "@db/relations";
@@ -10,12 +10,17 @@ let instance: ReturnType<typeof drizzle<typeof fullSchema>>;
 
 export function getDb() {
   if (!instance) {
-    const pool = createPool({
-      uri: env.databaseUrl,
+    // Parse DATABASE_URL into connection params
+    const url = new URL(env.databaseUrl);
+    const connection = mysql.createConnection({
+      host: url.hostname,
+      port: parseInt(url.port) || 3306,
+      user: url.username,
+      password: decodeURIComponent(url.password),
+      database: url.pathname.slice(1),
       ssl: { rejectUnauthorized: false },
-      connectionLimit: 10,
     });
-    instance = drizzle(pool, {
+    instance = drizzle(connection, {
       mode: "planetscale",
       schema: fullSchema,
     });
