@@ -1,12 +1,29 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { load, save } from "./lib/store";
-
-const STORAGE_KEY = "title_items";
+import { getPlanetScalePool } from "./queries/planetscale";
 
 export const titleRouter = createRouter({
   list: publicQuery.query(async () => {
-    return load(STORAGE_KEY, []);
+    const pool = getPlanetScalePool();
+    const [rows] = await pool.execute(
+      "SELECT * FROM title_items ORDER BY id DESC"
+    );
+    return (rows as any[]).map((r) => ({
+      id: r.id,
+      name: r.name,
+      direction: r.direction || "",
+      reference: r.reference || "",
+      referenceImages: typeof r.reference_images === "string" ? JSON.parse(r.reference_images || "[]") : r.reference_images || [],
+      directorSuggest: r.director_suggest || "",
+      directorVote: r.director_vote || "pending",
+      editorSuggest: r.editor_suggest || "",
+      editorVote: r.editor_vote || "pending",
+      operatorSuggest: r.operator_suggest || "",
+      operatorVote: r.operator_vote || "pending",
+      finalDecision: r.final_decision || "execute",
+      rowHighlight: r.row_highlight || "none",
+      createdAt: r.created_at,
+    }));
   }),
 
   bulkReplace: publicQuery
@@ -30,7 +47,30 @@ export const titleRouter = createRouter({
       )
     )
     .mutation(async ({ input }) => {
-      save(STORAGE_KEY, input);
+      const pool = getPlanetScalePool();
+      await pool.execute("DELETE FROM title_items");
+      if (input.length > 0) {
+        const placeholders = input.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params = input.flatMap((item) => [
+          item.name,
+          item.direction,
+          item.reference,
+          JSON.stringify(item.referenceImages),
+          item.directorSuggest,
+          item.directorVote,
+          item.editorSuggest,
+          item.editorVote,
+          item.operatorSuggest,
+          item.operatorVote,
+          item.finalDecision,
+          item.rowHighlight,
+          item.createdAt,
+        ]);
+        await pool.execute(
+          `INSERT INTO title_items (name, direction, reference, reference_images, director_suggest, director_vote, editor_suggest, editor_vote, operator_suggest, operator_vote, final_decision, row_highlight, created_at) VALUES ${placeholders}`,
+          params
+        );
+      }
       return { count: input.length };
     }),
 });
